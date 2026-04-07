@@ -1,0 +1,22 @@
+PODS:
+  - Flutter (1.0.0)
+  - unity_kit (0.9.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - unity_kit (from `.symlinks/plugins/unity_kit/ios`)
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  unity_kit:
+    :path: ".symlinks/plugins/unity_kit/ios"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  unity_kit: f50bdb5b88e06e301dae9ac83eb5ed1e23f3e312
+
+PODFILE CHECKSUM: 57e1625d277cd7f7e0d7e62faa75b149866ee737
+
+COCOAPODS: 1.16.2
