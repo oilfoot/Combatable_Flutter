@@ -9,97 +9,68 @@ class UnityPreviewScreen extends StatefulWidget {
     super.key,
     required this.unityService,
     required this.sequenceController,
+    this.embeddedInTab = false,
   });
 
   final UnityService unityService;
   final SequenceController sequenceController;
+  final bool embeddedInTab;
 
   @override
   State<UnityPreviewScreen> createState() => _UnityPreviewScreenState();
 }
 
 class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
-  bool _hasSentSequence = false;
-
   @override
   void initState() {
     super.initState();
-    widget.unityService.markUnityNotReady();
+    Future.microtask(_preparePreview);
   }
 
-  Future<void> _sendSequenceOnce() async {
-    if (_hasSentSequence) return;
-    _hasSentSequence = true;
+  Future<void> _preparePreview() async {
+    await widget.unityService.preparePreview(
+      sequenceName: widget.sequenceController.sequenceName,
+      animations: widget.sequenceController.getAnimationNamesForUnity(),
+    );
 
-    await widget.sequenceController.sendToUnity();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.sequenceController;
-
     return Scaffold(
-      appBar: AppBar(title: Text(controller.sequenceName)),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: UnityView(
-              bridge: widget.unityService.bridge,
-              config: const UnityConfig(sceneName: 'MainScene'),
-              placeholder: const Center(child: CircularProgressIndicator()),
-              onReady: (bridge) async {
-                widget.unityService.markUnityReady();
-                setState(() {});
-                await _sendSequenceOnce();
-              },
-              onMessage: (message) {
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-              onSceneLoaded: (scene) {
-                if (mounted) {
-                  setState(() {});
-                }
-              },
-            ),
-          ),
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 12,
-            child: SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                color: Colors.black54,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      controller.isUnityReady
-                          ? 'Unity ready'
-                          : 'Loading Unity...',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sequence: ${controller.sequenceName}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    Text(
-                      'Animations: ${controller.getAnimationNamesForUnity().join(", ")}',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+      appBar: widget.embeddedInTab ? AppBar(title: const Text('Unity')) : null,
+      body: UnityView(
+        bridge: widget.unityService.bridge,
+        config: const UnityConfig(
+          sceneName: 'MainScene',
+          fullscreen: true,
+          unloadOnDispose: false,
+        ),
+        placeholder: const Center(child: CircularProgressIndicator()),
+        onReady: (bridge) async {
+          widget.unityService.markUnityReady();
+          await widget.unityService.sendSequenceWhenReady(
+            sequenceName: widget.sequenceController.sequenceName,
+            animations: widget.sequenceController.getAnimationNamesForUnity(),
+          );
+
+          if (mounted) {
+            setState(() {});
+          }
+        },
+        onMessage: (message) {
+          if (mounted) {
+            setState(() {});
+          }
+        },
+        onSceneLoaded: (scene) {
+          if (mounted) {
+            setState(() {});
+          }
+        },
       ),
     );
   }

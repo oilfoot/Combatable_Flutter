@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_shell.dart';
 import 'controllers/sequence_controller.dart';
-import 'screens/sequence_builder_screen.dart';
 import 'services/unity_service.dart';
 
 Future<void> main() async {
@@ -31,9 +31,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Unity Sequence Prototype',
+      title: 'Combatable Prototype',
       theme: ThemeData.dark(),
-      home: SequenceBuilderScreen(
+      home: AppShell(
         unityService: unityService,
         sequenceController: sequenceController,
       ),

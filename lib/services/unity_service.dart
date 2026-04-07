@@ -70,6 +70,63 @@ class UnityService {
     );
   }
 
+  Future<void> sendSequenceWhenReady({
+    required String sequenceName,
+    required List<String> animations,
+  }) async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    final msg = UnityMessage.to(
+      'FlutterSequenceReceiver',
+      'SetSequence',
+      <String, dynamic>{'sequenceName': sequenceName, 'animations': animations},
+    );
+
+    await bridge.sendWhenReady(msg);
+
+    _log(
+      "Queued sequence '$sequenceName' with ${animations.length} animation(s) for Unity.",
+    );
+  }
+
+  Future<void> resumeUnity() async {
+    if (!_isInitialized) return;
+
+    try {
+      await bridge.resume();
+      _isUnityReady = true;
+      _log("Unity resumed");
+    } catch (e) {
+      _log("Unity resume skipped: $e");
+    }
+  }
+
+  Future<void> pauseUnity() async {
+    if (!_isInitialized) return;
+
+    try {
+      await bridge.pause();
+      _isUnityReady = false;
+      _log("Unity paused");
+    } catch (e) {
+      _log("Unity pause skipped: $e");
+    }
+  }
+
+  Future<void> preparePreview({
+    required String sequenceName,
+    required List<String> animations,
+  }) async {
+    await resumeUnity();
+
+    await sendSequenceWhenReady(
+      sequenceName: sequenceName,
+      animations: animations,
+    );
+  }
+
   void _log(String text) {
     if (!_logController.isClosed) {
       _logController.add(text);
