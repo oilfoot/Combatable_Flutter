@@ -32,6 +32,7 @@ class SequenceController extends ChangeNotifier {
   List<String> get logs => List.unmodifiable(_logs);
 
   bool get isUnityReady => unityService.isUnityReady;
+  bool get hasAnimations => _selectedAnimations.isNotEmpty;
 
   void setSequenceName(String value) {
     final trimmed = value.trim();
@@ -39,9 +40,47 @@ class SequenceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? get requiredNextStartPosition {
+    if (_selectedAnimations.isEmpty) return null;
+    return _selectedAnimations.last.endPosition;
+  }
+
+  bool canAddAnimation(AnimationLibraryItem item) {
+    if (_selectedAnimations.isEmpty) return true;
+
+    final requiredStart = requiredNextStartPosition;
+    if (requiredStart == null) return true;
+
+    return item.startPosition == requiredStart;
+  }
+
+  List<AnimationLibraryItem> getAvailableLibraryItems(
+    List<AnimationLibraryItem> fullLibrary,
+  ) {
+    if (_selectedAnimations.isEmpty) {
+      return List<AnimationLibraryItem>.from(fullLibrary);
+    }
+
+    final requiredStart = requiredNextStartPosition;
+    return fullLibrary
+        .where((item) => item.startPosition == requiredStart)
+        .toList();
+  }
+
   void addAnimationItem(AnimationLibraryItem item) {
+    if (!canAddAnimation(item)) {
+      _addLocalLog(
+        "Blocked animation: ${item.title} does not match required start position '$requiredNextStartPosition'.",
+      );
+      notifyListeners();
+      return;
+    }
+
     _selectedAnimations.add(item);
-    _addLocalLog("Added animation: ${item.title} (${item.animationName})");
+    _addLocalLog(
+      "Added animation: ${item.title} (${item.animationName}) "
+      "[${item.startPosition} -> ${item.endPosition}]",
+    );
     notifyListeners();
   }
 
@@ -50,7 +89,10 @@ class SequenceController extends ChangeNotifier {
 
     final removed = _selectedAnimations[index];
     _selectedAnimations.removeAt(index);
-    _addLocalLog("Removed animation: ${removed.title}");
+    _addLocalLog(
+      "Removed animation: ${removed.title} "
+      "[${removed.startPosition} -> ${removed.endPosition}]",
+    );
     notifyListeners();
   }
 
@@ -62,22 +104,30 @@ class SequenceController extends ChangeNotifier {
 
   void loadQuickTestData(List<AnimationLibraryItem> libraryItems) {
     _sequenceName = 'Prototype Sequence';
-    _selectedAnimations
-      ..clear()
-      ..addAll(libraryItems.take(3));
+    _selectedAnimations.clear();
+
+    for (final item in libraryItems) {
+      if (_selectedAnimations.isEmpty || canAddAnimation(item)) {
+        _selectedAnimations.add(item);
+      }
+
+      if (_selectedAnimations.length >= 3) {
+        break;
+      }
+    }
 
     _addLocalLog("Inserted quick test data.");
     notifyListeners();
   }
 
-  Future<void> sendToUnity() async {
-    final animationNames = _selectedAnimations
-        .map((item) => item.animationName)
-        .toList();
+  List<String> getAnimationNamesForUnity() {
+    return _selectedAnimations.map((item) => item.animationName).toList();
+  }
 
+  Future<void> sendToUnity() async {
     await unityService.sendSequence(
       sequenceName: _sequenceName,
-      animations: animationNames,
+      animations: getAnimationNamesForUnity(),
     );
   }
 

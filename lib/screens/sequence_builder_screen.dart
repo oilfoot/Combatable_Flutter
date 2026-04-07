@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:unity_kit/unity_kit.dart';
 
 import '../controllers/sequence_controller.dart';
 import '../data/mock_animation_library.dart';
 import '../models/animation_library_item.dart';
 import '../services/unity_service.dart';
+import 'unity_preview_screen.dart';
 
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
@@ -58,68 +58,72 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     widget.sequenceController.addAnimationItem(item);
   }
 
+  Future<void> _openUnityPreview() async {
+    if (!widget.sequenceController.hasAnimations) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => UnityPreviewScreen(
+          unityService: widget.unityService,
+          sequenceController: widget.sequenceController,
+        ),
+      ),
+    );
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.sequenceController;
+    final availableItems = controller.getAvailableLibraryItems(
+      mockAnimationLibrary,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Unity Sequence Prototype')),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 4,
-            child: UnityView(
-              bridge: widget.unityService.bridge,
-              config: const UnityConfig(sceneName: 'MainScene'),
-              placeholder: const Center(child: CircularProgressIndicator()),
-              onReady: (bridge) {
-                widget.unityService.markUnityReady();
-                setState(() {});
-              },
-              onMessage: (message) {
-                setState(() {});
-              },
-              onSceneLoaded: (scene) {
-                setState(() {});
-              },
+      appBar: AppBar(title: const Text('Sequence Builder')),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _sequenceNameController,
+              decoration: const InputDecoration(
+                labelText: 'Sequence name',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: controller.setSequenceName,
             ),
-          ),
-          Expanded(
-            flex: 7,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    controller.isUnityReady ? 'Unity ready' : 'Unity not ready',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _sequenceNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Sequence name',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: controller.setSequenceName,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Animation Library',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 150,
-                    child: ListView.builder(
+            const SizedBox(height: 12),
+            Text(
+              controller.selectedAnimations.isEmpty
+                  ? 'Animation Library'
+                  : 'Animation Library — only matches for start "${controller.requiredNextStartPosition}"',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: availableItems.isEmpty
+                  ? Container(
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      color: Colors.black12,
+                      child: const Text(
+                        'No matching follow-up animations available',
+                      ),
+                    )
+                  : ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: mockAnimationLibrary.length,
+                      itemCount: availableItems.length,
                       itemBuilder: (context, index) {
-                        final item = mockAnimationLibrary[index];
+                        final item = availableItems[index];
 
                         return SizedBox(
-                          width: 180,
+                          width: 220,
                           child: Card(
                             margin: const EdgeInsets.only(right: 10),
                             child: Padding(
@@ -136,7 +140,16 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    item.animationName,
+                                    'Clip: ${item.animationName}',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Start: ${item.startPosition}',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                  Text(
+                                    'End: ${item.endPosition}',
                                     style: const TextStyle(fontSize: 13),
                                   ),
                                   const Spacer(),
@@ -154,104 +167,94 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         );
                       },
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ElevatedButton(
-                        onPressed: () =>
-                            controller.loadQuickTestData(mockAnimationLibrary),
-                        child: const Text('Quick Test'),
-                      ),
-                      ElevatedButton(
-                        onPressed: controller.clearAnimations,
-                        child: const Text('Clear List'),
-                      ),
-                      ElevatedButton(
-                        onPressed:
-                            controller.isUnityReady &&
-                                controller.selectedAnimations.isNotEmpty
-                            ? () async {
-                                await controller.sendToUnity();
-                              }
-                            : null,
-                        child: const Text('Send To Unity'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Current Sequence',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.black26,
-                      child: controller.selectedAnimations.isEmpty
-                          ? const Center(
-                              child: Text('No animations selected yet'),
-                            )
-                          : ListView.builder(
-                              itemCount: controller.selectedAnimations.length,
-                              itemBuilder: (context, index) {
-                                final item =
-                                    controller.selectedAnimations[index];
-
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
-                                  ),
-                                  child: ListTile(
-                                    leading: Text('${index + 1}'),
-                                    title: Text(item.title),
-                                    subtitle: Text(item.animationName),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete_outline),
-                                      onPressed: () =>
-                                          controller.removeAnimationAt(index),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Flutter logs',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 110,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      color: Colors.black26,
-                      child: ListView.builder(
-                        itemCount: controller.logs.length,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ElevatedButton(
+                  onPressed: () =>
+                      controller.loadQuickTestData(mockAnimationLibrary),
+                  child: const Text('Quick Test'),
+                ),
+                ElevatedButton(
+                  onPressed: controller.clearAnimations,
+                  child: const Text('Clear List'),
+                ),
+                ElevatedButton(
+                  onPressed: controller.hasAnimations
+                      ? _openUnityPreview
+                      : null,
+                  child: const Text('Open Unity Preview'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Current Sequence',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                color: Colors.black26,
+                child: controller.selectedAnimations.isEmpty
+                    ? const Center(child: Text('No animations selected yet'))
+                    : ListView.builder(
+                        itemCount: controller.selectedAnimations.length,
                         itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Text(
-                              controller.logs[index],
-                              style: const TextStyle(fontSize: 12),
+                          final item = controller.selectedAnimations[index];
+
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              leading: Text('${index + 1}'),
+                              title: Text(item.title),
+                              subtitle: Text(
+                                '${item.animationName}  •  ${item.startPosition} -> ${item.endPosition}',
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () =>
+                                    controller.removeAnimationAt(index),
+                              ),
                             ),
                           );
                         },
                       ),
-                    ),
-                  ),
-                ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            const Text(
+              'Flutter logs',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 110,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                color: Colors.black26,
+                child: ListView.builder(
+                  itemCount: controller.logs.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        controller.logs[index],
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
