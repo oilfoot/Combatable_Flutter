@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 import 'app_shell.dart';
 import 'controllers/sequence_controller.dart';
@@ -7,6 +9,10 @@ import 'services/unity_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 🔥 Initialize Firebase FIRST
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Your existing setup
   final unityService = UnityService();
   await unityService.initialize();
 

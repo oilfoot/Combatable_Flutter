@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "568540274890",
+    "project_id": "combatable",
+    "storage_bucket": "combatable.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:568540274890:android:c2f6dca407d689446e9433",
+        "android_client_info": {
+          "package_name": "com.example.combatable_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5Wx6OvdUoasayBOkG4X1-KY4FRzr7yWo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
