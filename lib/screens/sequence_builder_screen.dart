@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../controllers/sequence_controller.dart';
 import '../data/mock_animation_library.dart';
@@ -21,6 +25,18 @@ class SequenceBuilderScreen extends StatefulWidget {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   late final TextEditingController _sequenceNameController;
+
+  String _addressablesStatus = 'Not downloaded yet.';
+  String? _addressablesDirPath;
+  String? _catalogPath;
+  bool _isDownloadingAddressables = false;
+  bool _isSendingCatalog = false;
+
+  static const List<String> _addressableFiles = <String>[
+    'catalog.hash',
+    'catalog.bin',
+    'remotegroup_assets_all_c8ca3e9e6d0cf52e5ccc935ebcb07b4f.bundle',
+  ];
 
   @override
   void initState() {
@@ -55,6 +71,90 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
   void _addLibraryItem(AnimationLibraryItem item) {
     widget.sequenceController.addAnimationItem(item);
+  }
+
+  Future<void> _downloadAddressables() async {
+    if (_isDownloadingAddressables) return;
+
+    setState(() {
+      _isDownloadingAddressables = true;
+      _addressablesStatus = 'Downloading Addressables...';
+    });
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final addressablesDir = Directory('${appDir.path}/addressables');
+
+      if (!await addressablesDir.exists()) {
+        await addressablesDir.create(recursive: true);
+      }
+
+      for (final fileName in _addressableFiles) {
+        final localFile = File('${addressablesDir.path}/$fileName');
+        final ref = FirebaseStorage.instance.ref('addressables/iOS/$fileName');
+
+        await ref.writeToFile(localFile);
+      }
+
+      final catalogPath = '${addressablesDir.path}/catalog.bin';
+
+      setState(() {
+        _addressablesDirPath = addressablesDir.path;
+        _catalogPath = catalogPath;
+        _addressablesStatus =
+            'Addressables ready.\nFolder: ${addressablesDir.path}\nCatalog: $catalogPath';
+      });
+    } catch (e) {
+      setState(() {
+        _addressablesStatus = 'Download failed:\n$e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloadingAddressables = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadCatalogInUnity() async {
+    if (_isSendingCatalog) return;
+
+    if (_catalogPath == null || _catalogPath!.isEmpty) {
+      setState(() {
+        _addressablesStatus =
+            'No catalog path available yet. Download Addressables first.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSendingCatalog = true;
+      _addressablesStatus = 'Sending catalog path to Unity...';
+    });
+
+    try {
+      await widget.unityService.resumeUnity();
+
+      await widget.unityService.loadLocalAddressablesCatalog(
+        catalogPath: _catalogPath!,
+      );
+
+      setState(() {
+        _addressablesStatus =
+            'Catalog path sent to Unity.\nCatalog: $_catalogPath';
+      });
+    } catch (e) {
+      setState(() {
+        _addressablesStatus = 'Failed to send catalog to Unity:\n$e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingCatalog = false;
+        });
+      }
+    }
   }
 
   @override
@@ -184,7 +284,59 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     onPressed: controller.clearAnimations,
                     child: const Text('Clear List'),
                   ),
+                  ElevatedButton(
+                    onPressed: _isDownloadingAddressables
+                        ? null
+                        : _downloadAddressables,
+                    child: Text(
+                      _isDownloadingAddressables
+                          ? 'Downloading...'
+                          : 'Download Addressables',
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: _isSendingCatalog ? null : _loadCatalogInUnity,
+                    child: Text(
+                      _isSendingCatalog
+                          ? 'Sending to Unity...'
+                          : 'Load Catalog in Unity',
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Addressables Test',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                color: Colors.black26,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _addressablesStatus,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    if (_addressablesDirPath != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Local folder:\n$_addressablesDirPath',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                    if (_catalogPath != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Catalog path:\n$_catalogPath',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
               const Text(

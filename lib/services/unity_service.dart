@@ -145,4 +145,22 @@ class UnityService {
     _isInitialized = false;
     _isUnityReady = false;
   }
+
+  Future<void> loadLocalAddressablesCatalog({
+    required String catalogPath,
+  }) async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    final msg = UnityMessage.to(
+      'LocalAddressablesReceiver',
+      'LoadLocalCatalog',
+      <String, dynamic>{'catalogPath': catalogPath},
+    );
+
+    await bridge.sendWhenReady(msg);
+
+    _log("Sent local catalog path to Unity: $catalogPath");
+  }
 }
