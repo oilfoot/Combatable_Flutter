@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_storage/firebase_storage.dart';
@@ -32,10 +33,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   bool _isDownloadingAddressables = false;
   bool _isSendingCatalog = false;
 
+  final List<AnimationLibraryItem> _downloadedAddressableItems = [];
+
   static const List<String> _addressableFiles = <String>[
     'catalog.hash',
     'catalog.bin',
-    'remotegroup_assets_all_c8ca3e9e6d0cf52e5ccc935ebcb07b4f.bundle',
+    'remotegroup_assets_all_32ac13a254b1b106f3bf8005a358bfca.bundle',
+    'addressables_manifest.json',
   ];
 
   @override
@@ -73,6 +77,93 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     widget.sequenceController.addAnimationItem(item);
   }
 
+  List<AnimationLibraryItem> _parseManifestItems(String jsonString) {
+    final decoded = jsonDecode(jsonString);
+
+    if (decoded is! List) {
+      throw Exception('Manifest is not a JSON array.');
+    }
+
+    return decoded.map<AnimationLibraryItem>((entry) {
+      if (entry is! Map<String, dynamic>) {
+        throw Exception('Manifest entry is not a JSON object.');
+      }
+
+      return AnimationLibraryItem(
+        title: (entry['title'] ?? '').toString(),
+        animationName: (entry['animationName'] ?? '').toString(),
+        startPosition: (entry['startPosition'] ?? '').toString(),
+        endPosition: (entry['endPosition'] ?? '').toString(),
+      );
+    }).toList();
+  }
+
+  Widget _buildLibraryRow({
+    required List<AnimationLibraryItem> items,
+    required String emptyText,
+  }) {
+    if (items.isEmpty) {
+      return Container(
+        width: double.infinity,
+        alignment: Alignment.center,
+        color: Colors.black12,
+        child: Text(emptyText),
+      );
+    }
+
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+
+        return SizedBox(
+          width: 220,
+          child: Card(
+            margin: const EdgeInsets.only(right: 10),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Clip: ${item.animationName}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Start: ${item.startPosition}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  Text(
+                    'End: ${item.endPosition}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _addLibraryItem(item),
+                      child: const Text('Add'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _downloadAddressables() async {
     if (_isDownloadingAddressables) return;
 
@@ -92,17 +183,33 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       for (final fileName in _addressableFiles) {
         final localFile = File('${addressablesDir.path}/$fileName');
         final ref = FirebaseStorage.instance.ref('addressables/iOS/$fileName');
-
         await ref.writeToFile(localFile);
       }
+
+      final manifestFile = File(
+        '${addressablesDir.path}/addressables_manifest.json',
+      );
+
+      if (!await manifestFile.exists()) {
+        throw Exception('Manifest file was not downloaded.');
+      }
+
+      final manifestContent = await manifestFile.readAsString();
+      final parsedItems = _parseManifestItems(manifestContent);
 
       final catalogPath = '${addressablesDir.path}/catalog.bin';
 
       setState(() {
         _addressablesDirPath = addressablesDir.path;
         _catalogPath = catalogPath;
+        _downloadedAddressableItems
+          ..clear()
+          ..addAll(parsedItems);
         _addressablesStatus =
-            'Addressables ready.\nFolder: ${addressablesDir.path}\nCatalog: $catalogPath';
+            'Addressables ready.\n'
+            'Folder: ${addressablesDir.path}\n'
+            'Catalog: $catalogPath\n'
+            'Loaded ${parsedItems.length} item(s) from manifest.';
       });
     } catch (e) {
       setState(() {
@@ -160,8 +267,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.sequenceController;
-    final availableItems = controller.getAvailableLibraryItems(
+
+    final availableMockItems = controller.getAvailableLibraryItems(
       mockAnimationLibrary,
+    );
+
+    final availableDownloadedItems = controller.getAvailableLibraryItems(
+      _downloadedAddressableItems,
     );
 
     return Scaffold(
@@ -209,66 +321,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               const SizedBox(height: 8),
               SizedBox(
                 height: 180,
-                child: availableItems.isEmpty
-                    ? Container(
-                        width: double.infinity,
-                        alignment: Alignment.center,
-                        color: Colors.black12,
-                        child: const Text(
-                          'No matching follow-up animations available',
-                        ),
-                      )
-                    : ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: availableItems.length,
-                        itemBuilder: (context, index) {
-                          final item = availableItems[index];
-
-                          return SizedBox(
-                            width: 220,
-                            child: Card(
-                              margin: const EdgeInsets.only(right: 10),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.title,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Clip: ${item.animationName}',
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Start: ${item.startPosition}',
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                    Text(
-                                      'End: ${item.endPosition}',
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
-                                    const Spacer(),
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton(
-                                        onPressed: () => _addLibraryItem(item),
-                                        child: const Text('Add'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                child: _buildLibraryRow(
+                  items: availableMockItems,
+                  emptyText: 'No matching follow-up animations available',
+                ),
               ),
               const SizedBox(height: 12),
               Wrap(
@@ -303,6 +359,20 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Downloaded Addressables',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 180,
+                child: _buildLibraryRow(
+                  items: availableDownloadedItems,
+                  emptyText:
+                      'No downloaded remote items yet. Tap "Download Addressables".',
+                ),
               ),
               const SizedBox(height: 12),
               const Text(
