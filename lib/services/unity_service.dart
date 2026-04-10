@@ -91,6 +91,40 @@ class UnityService {
     );
   }
 
+  Future<void> loadLocalAddressablesCatalog({
+    required String catalogPath,
+  }) async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    final msg = UnityMessage.to(
+      'LocalAddressablesReceiver',
+      'LoadLocalCatalog',
+      <String, dynamic>{'catalogPath': catalogPath},
+    );
+
+    await bridge.sendWhenReady(msg);
+
+    _log("Sent local catalog path to Unity: $catalogPath");
+  }
+
+  Future<void> loadCurrentSequenceClips() async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    final msg = UnityMessage.to(
+      'AddressableClipLoaderReceiver',
+      'LoadCurrentSequenceClips',
+      <String, dynamic>{},
+    );
+
+    await bridge.sendWhenReady(msg);
+
+    _log("Sent LoadCurrentSequenceClips trigger to Unity.");
+  }
+
   Future<void> resumeUnity() async {
     if (!_isInitialized) return;
 
@@ -125,6 +159,8 @@ class UnityService {
       sequenceName: sequenceName,
       animations: animations,
     );
+
+    await loadCurrentSequenceClips();
   }
 
   void _log(String text) {
@@ -144,23 +180,5 @@ class UnityService {
 
     _isInitialized = false;
     _isUnityReady = false;
-  }
-
-  Future<void> loadLocalAddressablesCatalog({
-    required String catalogPath,
-  }) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
-
-    final msg = UnityMessage.to(
-      'LocalAddressablesReceiver',
-      'LoadLocalCatalog',
-      <String, dynamic>{'catalogPath': catalogPath},
-    );
-
-    await bridge.sendWhenReady(msg);
-
-    _log("Sent local catalog path to Unity: $catalogPath");
   }
 }
