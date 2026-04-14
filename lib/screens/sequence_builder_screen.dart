@@ -34,11 +34,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   bool _isSendingCatalog = false;
 
   final List<AnimationLibraryItem> _downloadedAddressableItems = [];
+  final List<String> _downloadedJsonPaths = [];
 
   static const List<String> _coreAddressableFiles = <String>[
     'catalog.hash',
     'catalog.bin',
-    'remotegroup_assets_all_1a694152187b5ec56c00e84edd5a2e93.bundle',
+    'remotegroup_assets_all_9b649835c7f880b94bee3adee85f030e.bundle',
     'addressables_manifest.json',
   ];
 
@@ -218,6 +219,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       final manifestEntries = _parseManifest(manifestContent);
 
       final parsedItems = <AnimationLibraryItem>[];
+      final downloadedJsonPaths = <String>[];
 
       for (final entry in manifestEntries) {
         final jsonFileName = (entry['jsonFile'] ?? '').toString().trim();
@@ -242,9 +244,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         final configContent = await localJsonFile.readAsString();
         final item = _parseAnimationConfig(configContent);
         parsedItems.add(item);
+        downloadedJsonPaths.add(localJsonFile.path);
       }
 
       final catalogPath = '${addressablesDir.path}/catalog.bin';
+
+      await widget.unityService.resumeUnity();
+      await widget.unityService.registerDownloadedJsonFiles(
+        jsonPaths: downloadedJsonPaths,
+      );
 
       setState(() {
         _addressablesDirPath = addressablesDir.path;
@@ -252,11 +260,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         _downloadedAddressableItems
           ..clear()
           ..addAll(parsedItems);
+        _downloadedJsonPaths
+          ..clear()
+          ..addAll(downloadedJsonPaths);
         _addressablesStatus =
             'Addressables ready.\n'
             'Folder: ${addressablesDir.path}\n'
             'Catalog: $catalogPath\n'
-            'Loaded ${parsedItems.length} animation config file(s).';
+            'Loaded ${parsedItems.length} animation config file(s).\n'
+            'Registered ${downloadedJsonPaths.length} JSON file(s) in Unity.';
       });
     } catch (e) {
       setState(() {
@@ -294,9 +306,17 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         catalogPath: _catalogPath!,
       );
 
+      if (_downloadedJsonPaths.isNotEmpty) {
+        await widget.unityService.registerDownloadedJsonFiles(
+          jsonPaths: _downloadedJsonPaths,
+        );
+      }
+
       setState(() {
         _addressablesStatus =
-            'Catalog path sent to Unity.\nCatalog: $_catalogPath';
+            'Catalog path sent to Unity.\n'
+            'Catalog: $_catalogPath\n'
+            'Re-registered ${_downloadedJsonPaths.length} JSON file(s).';
       });
     } catch (e) {
       setState(() {

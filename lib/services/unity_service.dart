@@ -109,6 +109,35 @@ class UnityService {
     _log("Sent local catalog path to Unity: $catalogPath");
   }
 
+  Future<void> registerDownloadedJson({required String jsonPath}) async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    final msg = UnityMessage.to(
+      'DownloadedJsonReceiver',
+      'RegisterDownloadedJson',
+      <String, dynamic>{'jsonPath': jsonPath},
+    );
+
+    await bridge.sendWhenReady(msg);
+
+    _log("Sent downloaded JSON path to Unity: $jsonPath");
+  }
+
+  Future<void> registerDownloadedJsonFiles({
+    required List<String> jsonPaths,
+  }) async {
+    if (!_isInitialized) {
+      throw Exception("UnityService is not initialized.");
+    }
+
+    for (final jsonPath in jsonPaths) {
+      if (jsonPath.trim().isEmpty) continue;
+      await registerDownloadedJson(jsonPath: jsonPath);
+    }
+  }
+
   Future<void> loadCurrentSequenceClips() async {
     if (!_isInitialized) {
       throw Exception("UnityService is not initialized.");
