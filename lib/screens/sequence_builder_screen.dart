@@ -35,10 +35,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
   final List<AnimationLibraryItem> _downloadedAddressableItems = [];
 
-  static const List<String> _addressableFiles = <String>[
+  static const List<String> _coreAddressableFiles = <String>[
     'catalog.hash',
     'catalog.bin',
-    'remotegroup_assets_all_32ac13a254b1b106f3bf8005a358bfca.bundle',
+    'remotegroup_assets_all_1a694152187b5ec56c00e84edd5a2e93.bundle',
     'addressables_manifest.json',
   ];
 
@@ -77,25 +77,43 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     widget.sequenceController.addAnimationItem(item);
   }
 
-  List<AnimationLibraryItem> _parseManifestItems(String jsonString) {
+  List<Map<String, dynamic>> _parseManifest(String jsonString) {
     final decoded = jsonDecode(jsonString);
 
     if (decoded is! List) {
       throw Exception('Manifest is not a JSON array.');
     }
 
-    return decoded.map<AnimationLibraryItem>((entry) {
+    return decoded.map<Map<String, dynamic>>((entry) {
       if (entry is! Map<String, dynamic>) {
         throw Exception('Manifest entry is not a JSON object.');
       }
-
-      return AnimationLibraryItem(
-        title: (entry['title'] ?? '').toString(),
-        animationName: (entry['animationName'] ?? '').toString(),
-        startPosition: (entry['startPosition'] ?? '').toString(),
-        endPosition: (entry['endPosition'] ?? '').toString(),
-      );
+      return entry;
     }).toList();
+  }
+
+  AnimationLibraryItem _parseAnimationConfig(String jsonString) {
+    final decoded = jsonDecode(jsonString);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Animation config is not a JSON object.');
+    }
+
+    final displayName = (decoded['displayName'] ?? '').toString().trim();
+    final animationName = (decoded['animationName'] ?? '').toString().trim();
+    final startPosition = (decoded['startPosition'] ?? '').toString().trim();
+    final endPosition = (decoded['endPosition'] ?? '').toString().trim();
+
+    if (animationName.isEmpty) {
+      throw Exception('Animation config is missing animationName.');
+    }
+
+    return AnimationLibraryItem(
+      title: displayName.isEmpty ? animationName : displayName,
+      animationName: animationName,
+      startPosition: startPosition,
+      endPosition: endPosition,
+    );
   }
 
   Widget _buildLibraryRow({
@@ -118,7 +136,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         final item = items[index];
 
         return SizedBox(
-          width: 220,
+          width: 240,
           child: Card(
             margin: const EdgeInsets.only(right: 10),
             child: Padding(
@@ -132,6 +150,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -180,7 +200,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         await addressablesDir.create(recursive: true);
       }
 
-      for (final fileName in _addressableFiles) {
+      for (final fileName in _coreAddressableFiles) {
         final localFile = File('${addressablesDir.path}/$fileName');
         final ref = FirebaseStorage.instance.ref('addressables/iOS/$fileName');
         await ref.writeToFile(localFile);
@@ -195,7 +215,34 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       }
 
       final manifestContent = await manifestFile.readAsString();
-      final parsedItems = _parseManifestItems(manifestContent);
+      final manifestEntries = _parseManifest(manifestContent);
+
+      final parsedItems = <AnimationLibraryItem>[];
+
+      for (final entry in manifestEntries) {
+        final jsonFileName = (entry['jsonFile'] ?? '').toString().trim();
+
+        if (jsonFileName.isEmpty) {
+          throw Exception('Manifest entry is missing jsonFile.');
+        }
+
+        final localJsonFile = File('${addressablesDir.path}/$jsonFileName');
+        final jsonRef = FirebaseStorage.instance.ref(
+          'addressables/iOS/$jsonFileName',
+        );
+
+        await jsonRef.writeToFile(localJsonFile);
+
+        if (!await localJsonFile.exists()) {
+          throw Exception(
+            'Animation config file was not downloaded: $jsonFileName',
+          );
+        }
+
+        final configContent = await localJsonFile.readAsString();
+        final item = _parseAnimationConfig(configContent);
+        parsedItems.add(item);
+      }
 
       final catalogPath = '${addressablesDir.path}/catalog.bin';
 
@@ -209,7 +256,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
             'Addressables ready.\n'
             'Folder: ${addressablesDir.path}\n'
             'Catalog: $catalogPath\n'
-            'Loaded ${parsedItems.length} item(s) from manifest.';
+            'Loaded ${parsedItems.length} animation config file(s).';
       });
     } catch (e) {
       setState(() {
