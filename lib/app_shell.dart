@@ -6,6 +6,7 @@ import 'screens/home_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/sequence_builder_screen.dart';
 import 'screens/unity_preview_screen.dart';
+import 'services/remote_addressables_service.dart';
 import 'services/unity_service.dart';
 
 class AppShell extends StatefulWidget {
@@ -25,13 +26,25 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 1;
 
+  late final RemoteAddressablesService _remoteAddressablesService;
+  late final List<Widget> _pages;
+
   @override
-  Widget build(BuildContext context) {
-    final pages = <Widget>[
+  void initState() {
+    super.initState();
+
+    _remoteAddressablesService = RemoteAddressablesService(
+      unityService: widget.unityService,
+    );
+
+    _remoteAddressablesService.refreshDownloadedStateFromDisk();
+
+    _pages = <Widget>[
       const HomeScreen(),
       SequenceBuilderScreen(
-        unityService: widget.unityService,
         sequenceController: widget.sequenceController,
+        remoteAddressablesService: _remoteAddressablesService,
+        onBuildUnitySequence: buildAndOpenUnity,
       ),
       UnityPreviewScreen(
         unityService: widget.unityService,
@@ -41,21 +54,51 @@ class _AppShellState extends State<AppShell> {
       const FullLibraryScreen(),
       const ProfileScreen(),
     ];
+  }
 
+  @override
+  void dispose() {
+    _remoteAddressablesService.dispose();
+    super.dispose();
+  }
+
+  /// 🔥 MAIN PIPELINE (this is your "one button does everything")
+  Future<void> buildAndOpenUnity() async {
+    // 1. Prepare addressables if needed
+    await _remoteAddressablesService.ensureUnityPrepared();
+
+    // 2. Send sequence + load clips
+    await widget.unityService.preparePreview(
+      sequenceName: widget.sequenceController.sequenceName,
+      animations: widget.sequenceController.getAnimationNamesForUnity(),
+    );
+
+    // 3. Open Unity tab
+    if (mounted) {
+      setState(() {
+        _currentIndex = 2;
+      });
+    }
+  }
+
+  Future<void> _openUnityPreview() async {
+    await buildAndOpenUnity();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: pages),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) async {
           if (_currentIndex == 2 && index != 2) {
             await widget.unityService.pauseUnity();
+            _remoteAddressablesService.markUnityStateDirty();
           }
 
           if (index == 2) {
-            await widget.unityService.preparePreview(
-              sequenceName: widget.sequenceController.sequenceName,
-              animations: widget.sequenceController.getAnimationNamesForUnity(),
-            );
+            await _openUnityPreview();
           }
 
           if (mounted) {

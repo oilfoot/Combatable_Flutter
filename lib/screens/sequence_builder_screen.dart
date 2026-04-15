@@ -1,24 +1,21 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../controllers/sequence_controller.dart';
 import '../data/mock_animation_library.dart';
 import '../models/animation_library_item.dart';
-import '../services/unity_service.dart';
+import '../services/remote_addressables_service.dart';
 
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
     super.key,
-    required this.unityService,
     required this.sequenceController,
+    required this.remoteAddressablesService,
+    required this.onBuildUnitySequence,
   });
 
-  final UnityService unityService;
   final SequenceController sequenceController;
+  final RemoteAddressablesService remoteAddressablesService;
+  final Future<void> Function() onBuildUnitySequence;
 
   @override
   State<SequenceBuilderScreen> createState() => _SequenceBuilderScreenState();
@@ -26,36 +23,26 @@ class SequenceBuilderScreen extends StatefulWidget {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   late final TextEditingController _sequenceNameController;
-
-  String _addressablesStatus = 'Not downloaded yet.';
-  String? _addressablesDirPath;
-  String? _catalogPath;
-  bool _isDownloadingAddressables = false;
-  bool _isSendingCatalog = false;
-
-  final List<AnimationLibraryItem> _downloadedAddressableItems = [];
-  final List<String> _downloadedJsonPaths = [];
-
-  static const List<String> _coreAddressableFiles = <String>[
-    'catalog.hash',
-    'catalog.bin',
-    'remotegroup_assets_all_9b649835c7f880b94bee3adee85f030e.bundle',
-    'addressables_manifest.json',
-  ];
+  late final RemoteAddressablesService _remoteAddressablesService;
 
   @override
   void initState() {
     super.initState();
+
     _sequenceNameController = TextEditingController(
       text: widget.sequenceController.sequenceName,
     );
 
+    _remoteAddressablesService = widget.remoteAddressablesService;
+
     widget.sequenceController.addListener(_onControllerChanged);
+    _remoteAddressablesService.addListener(_onRemoteChanged);
   }
 
   @override
   void dispose() {
     widget.sequenceController.removeListener(_onControllerChanged);
+    _remoteAddressablesService.removeListener(_onRemoteChanged);
     _sequenceNameController.dispose();
     super.dispose();
   }
@@ -69,52 +56,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       );
     }
 
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
+  }
+
+  void _onRemoteChanged() {
+    if (mounted) setState(() {});
   }
 
   void _addLibraryItem(AnimationLibraryItem item) {
     widget.sequenceController.addAnimationItem(item);
-  }
-
-  List<Map<String, dynamic>> _parseManifest(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-
-    if (decoded is! List) {
-      throw Exception('Manifest is not a JSON array.');
-    }
-
-    return decoded.map<Map<String, dynamic>>((entry) {
-      if (entry is! Map<String, dynamic>) {
-        throw Exception('Manifest entry is not a JSON object.');
-      }
-      return entry;
-    }).toList();
-  }
-
-  AnimationLibraryItem _parseAnimationConfig(String jsonString) {
-    final decoded = jsonDecode(jsonString);
-
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception('Animation config is not a JSON object.');
-    }
-
-    final displayName = (decoded['displayName'] ?? '').toString().trim();
-    final animationName = (decoded['animationName'] ?? '').toString().trim();
-    final startPosition = (decoded['startPosition'] ?? '').toString().trim();
-    final endPosition = (decoded['endPosition'] ?? '').toString().trim();
-
-    if (animationName.isEmpty) {
-      throw Exception('Animation config is missing animationName.');
-    }
-
-    return AnimationLibraryItem(
-      title: displayName.isEmpty ? animationName : displayName,
-      animationName: animationName,
-      startPosition: startPosition,
-      endPosition: endPosition,
-    );
   }
 
   Widget _buildLibraryRow({
@@ -155,19 +105,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Clip: ${item.animationName}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text('Clip: ${item.animationName}'),
                   const SizedBox(height: 4),
-                  Text(
-                    'Start: ${item.startPosition}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    'End: ${item.endPosition}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  Text('Start: ${item.startPosition}'),
+                  Text('End: ${item.endPosition}'),
                   const Spacer(),
                   SizedBox(
                     width: double.infinity,
@@ -185,162 +126,17 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     );
   }
 
-  Future<void> _downloadAddressables() async {
-    if (_isDownloadingAddressables) return;
-
-    setState(() {
-      _isDownloadingAddressables = true;
-      _addressablesStatus = 'Downloading Addressables...';
-    });
-
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      final addressablesDir = Directory('${appDir.path}/addressables');
-
-      if (!await addressablesDir.exists()) {
-        await addressablesDir.create(recursive: true);
-      }
-
-      for (final fileName in _coreAddressableFiles) {
-        final localFile = File('${addressablesDir.path}/$fileName');
-        final ref = FirebaseStorage.instance.ref('addressables/iOS/$fileName');
-        await ref.writeToFile(localFile);
-      }
-
-      final manifestFile = File(
-        '${addressablesDir.path}/addressables_manifest.json',
-      );
-
-      if (!await manifestFile.exists()) {
-        throw Exception('Manifest file was not downloaded.');
-      }
-
-      final manifestContent = await manifestFile.readAsString();
-      final manifestEntries = _parseManifest(manifestContent);
-
-      final parsedItems = <AnimationLibraryItem>[];
-      final downloadedJsonPaths = <String>[];
-
-      for (final entry in manifestEntries) {
-        final jsonFileName = (entry['jsonFile'] ?? '').toString().trim();
-
-        if (jsonFileName.isEmpty) {
-          throw Exception('Manifest entry is missing jsonFile.');
-        }
-
-        final localJsonFile = File('${addressablesDir.path}/$jsonFileName');
-        final jsonRef = FirebaseStorage.instance.ref(
-          'addressables/iOS/$jsonFileName',
-        );
-
-        await jsonRef.writeToFile(localJsonFile);
-
-        if (!await localJsonFile.exists()) {
-          throw Exception(
-            'Animation config file was not downloaded: $jsonFileName',
-          );
-        }
-
-        final configContent = await localJsonFile.readAsString();
-        final item = _parseAnimationConfig(configContent);
-        parsedItems.add(item);
-        downloadedJsonPaths.add(localJsonFile.path);
-      }
-
-      final catalogPath = '${addressablesDir.path}/catalog.bin';
-
-      await widget.unityService.resumeUnity();
-      await widget.unityService.registerDownloadedJsonFiles(
-        jsonPaths: downloadedJsonPaths,
-      );
-
-      setState(() {
-        _addressablesDirPath = addressablesDir.path;
-        _catalogPath = catalogPath;
-        _downloadedAddressableItems
-          ..clear()
-          ..addAll(parsedItems);
-        _downloadedJsonPaths
-          ..clear()
-          ..addAll(downloadedJsonPaths);
-        _addressablesStatus =
-            'Addressables ready.\n'
-            'Folder: ${addressablesDir.path}\n'
-            'Catalog: $catalogPath\n'
-            'Loaded ${parsedItems.length} animation config file(s).\n'
-            'Registered ${downloadedJsonPaths.length} JSON file(s) in Unity.';
-      });
-    } catch (e) {
-      setState(() {
-        _addressablesStatus = 'Download failed:\n$e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isDownloadingAddressables = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadCatalogInUnity() async {
-    if (_isSendingCatalog) return;
-
-    if (_catalogPath == null || _catalogPath!.isEmpty) {
-      setState(() {
-        _addressablesStatus =
-            'No catalog path available yet. Download Addressables first.';
-      });
-      return;
-    }
-
-    setState(() {
-      _isSendingCatalog = true;
-      _addressablesStatus = 'Sending catalog path to Unity...';
-    });
-
-    try {
-      await widget.unityService.resumeUnity();
-
-      await widget.unityService.loadLocalAddressablesCatalog(
-        catalogPath: _catalogPath!,
-      );
-
-      if (_downloadedJsonPaths.isNotEmpty) {
-        await widget.unityService.registerDownloadedJsonFiles(
-          jsonPaths: _downloadedJsonPaths,
-        );
-      }
-
-      setState(() {
-        _addressablesStatus =
-            'Catalog path sent to Unity.\n'
-            'Catalog: $_catalogPath\n'
-            'Re-registered ${_downloadedJsonPaths.length} JSON file(s).';
-      });
-    } catch (e) {
-      setState(() {
-        _addressablesStatus = 'Failed to send catalog to Unity:\n$e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSendingCatalog = false;
-        });
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = widget.sequenceController;
+    final remote = _remoteAddressablesService;
 
     final availableMockItems = controller.getAvailableLibraryItems(
       mockAnimationLibrary,
     );
 
     final availableDownloadedItems = controller.getAvailableLibraryItems(
-      _downloadedAddressableItems,
+      remote.downloadedItems,
     );
 
     return Scaffold(
@@ -351,6 +147,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              /// Sequence Name
               TextField(
                 controller: _sequenceNameController,
                 decoration: const InputDecoration(
@@ -359,41 +156,44 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 ),
                 onChanged: controller.setSequenceName,
               ),
+
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text(
-                    'Animation Library',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+
+              /// 🔥 BUILD BUTTON (MAIN FEATURE)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: widget.onBuildUnitySequence,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  const Spacer(),
-                  if (controller.requiredNextStartPosition != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        'Need: ${controller.requiredNextStartPosition}',
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                ],
+                  child: const Text(
+                    'Build Unity Sequence',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// Local Library
+              const Text(
+                'Animation Library',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 180,
                 child: _buildLibraryRow(
                   items: availableMockItems,
-                  emptyText: 'No matching follow-up animations available',
+                  emptyText: 'No matching animations',
                 ),
               ),
+
               const SizedBox(height: 12),
+
+              /// Actions
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -408,26 +208,21 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     child: const Text('Clear List'),
                   ),
                   ElevatedButton(
-                    onPressed: _isDownloadingAddressables
+                    onPressed: remote.isDownloading
                         ? null
-                        : _downloadAddressables,
+                        : remote.downloadAddressables,
                     child: Text(
-                      _isDownloadingAddressables
+                      remote.isDownloading
                           ? 'Downloading...'
                           : 'Download Addressables',
                     ),
                   ),
-                  ElevatedButton(
-                    onPressed: _isSendingCatalog ? null : _loadCatalogInUnity,
-                    child: Text(
-                      _isSendingCatalog
-                          ? 'Sending to Unity...'
-                          : 'Load Catalog in Unity',
-                    ),
-                  ),
                 ],
               ),
+
               const SizedBox(height: 12),
+
+              /// Downloaded Library
               const Text(
                 'Downloaded Addressables',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -437,13 +232,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 height: 180,
                 child: _buildLibraryRow(
                   items: availableDownloadedItems,
-                  emptyText:
-                      'No downloaded remote items yet. Tap "Download Addressables".',
+                  emptyText: 'No downloaded animations',
                 ),
               ),
+
               const SizedBox(height: 12),
+
+              /// Status
               const Text(
-                'Addressables Test',
+                'Addressables Status',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -451,31 +248,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 color: Colors.black26,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _addressablesStatus,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    if (_addressablesDirPath != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Local folder:\n$_addressablesDirPath',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                    if (_catalogPath != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Catalog path:\n$_catalogPath',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ],
+                child: Text(
+                  remote.status,
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
+
               const SizedBox(height: 12),
+
+              /// Current Sequence
               const Text(
                 'Current Sequence',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -486,9 +267,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 padding: const EdgeInsets.all(8),
                 color: Colors.black26,
                 child: controller.selectedAnimations.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
                           child: Text('No animations selected yet'),
                         ),
                       )
@@ -499,49 +280,17 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         itemBuilder: (context, index) {
                           final item = controller.selectedAnimations[index];
 
-                          return Card(
-                            margin: const EdgeInsets.symmetric(vertical: 4),
-                            child: ListTile(
-                              leading: Text('${index + 1}'),
-                              title: Text(item.title),
-                              subtitle: Text(
-                                '${item.animationName}  •  ${item.startPosition} -> ${item.endPosition}',
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                onPressed: () =>
-                                    controller.removeAnimationAt(index),
-                              ),
+                          return ListTile(
+                            title: Text(item.title),
+                            subtitle: Text(item.animationName),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () =>
+                                  controller.removeAnimationAt(index),
                             ),
                           );
                         },
                       ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Flutter logs',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 110,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.black26,
-                  child: ListView.builder(
-                    itemCount: controller.logs.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text(
-                          controller.logs[index],
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      );
-                    },
-                  ),
-                ),
               ),
             ],
           ),
