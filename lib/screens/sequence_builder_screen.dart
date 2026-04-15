@@ -56,20 +56,45 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       );
     }
 
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _onRemoteChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _addLibraryItem(AnimationLibraryItem item) {
     widget.sequenceController.addAnimationItem(item);
   }
 
+  Future<void> _handleRemoteItemTap(AnimationLibraryItem item) async {
+    try {
+      final isDownloaded = _remoteAddressablesService.isAnimationDownloaded(
+        item.animationName,
+      );
+
+      if (!isDownloaded) {
+        await _remoteAddressablesService.downloadAnimation(item.animationName);
+      }
+
+      _addLibraryItem(item);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to download/add ${item.title}: $e')),
+      );
+    }
+  }
+
   Widget _buildLibraryRow({
     required List<AnimationLibraryItem> items,
     required String emptyText,
+    required bool useRemoteState,
   }) {
     if (items.isEmpty) {
       return Container(
@@ -85,6 +110,26 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
+
+        final isDownloaded = useRemoteState
+            ? _remoteAddressablesService.isAnimationDownloaded(
+                item.animationName,
+              )
+            : true;
+
+        final isDownloading = useRemoteState
+            ? _remoteAddressablesService.isAnimationDownloading(
+                item.animationName,
+              )
+            : false;
+
+        final buttonText = useRemoteState
+            ? isDownloading
+                  ? 'Downloading...'
+                  : isDownloaded
+                  ? 'Add'
+                  : 'Download & Add'
+            : 'Add';
 
         return SizedBox(
           width: 240,
@@ -105,16 +150,56 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  Text('Clip: ${item.animationName}'),
+                  Text(
+                    'Clip: ${item.animationName}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Start: ${item.startPosition}'),
-                  Text('End: ${item.endPosition}'),
+                  Text(
+                    'Start: ${item.startPosition}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  Text(
+                    'End: ${item.endPosition}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 8),
+                  if (useRemoteState)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDownloaded
+                            ? Colors.green.shade100
+                            : Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        isDownloaded ? 'Installed' : 'Not installed',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDownloaded
+                              ? Colors.green.shade900
+                              : Colors.orange.shade900,
+                        ),
+                      ),
+                    ),
                   const Spacer(),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => _addLibraryItem(item),
-                      child: const Text('Add'),
+                      onPressed: isDownloading
+                          ? null
+                          : () async {
+                              if (useRemoteState) {
+                                await _handleRemoteItemTap(item);
+                              } else {
+                                _addLibraryItem(item);
+                              }
+                            },
+                      child: Text(buttonText),
                     ),
                   ),
                 ],
@@ -135,8 +220,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       mockAnimationLibrary,
     );
 
-    final availableDownloadedItems = controller.getAvailableLibraryItems(
-      remote.downloadedItems,
+    final availableRemoteItems = controller.getAvailableLibraryItems(
+      remote.availableItems,
     );
 
     return Scaffold(
@@ -147,7 +232,6 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              /// Sequence Name
               TextField(
                 controller: _sequenceNameController,
                 decoration: const InputDecoration(
@@ -156,10 +240,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 ),
                 onChanged: controller.setSequenceName,
               ),
-
               const SizedBox(height: 12),
-
-              /// 🔥 BUILD BUTTON (MAIN FEATURE)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -174,26 +255,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              /// Local Library
-              const Text(
-                'Animation Library',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 180,
-                child: _buildLibraryRow(
-                  items: availableMockItems,
-                  emptyText: 'No matching animations',
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              /// Actions
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -208,37 +270,48 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     child: const Text('Clear List'),
                   ),
                   ElevatedButton(
-                    onPressed: remote.isDownloading
+                    onPressed: remote.isInitializing
                         ? null
-                        : remote.downloadAddressables,
+                        : remote.refreshLibrary,
                     child: Text(
-                      remote.isDownloading
-                          ? 'Downloading...'
-                          : 'Download Addressables',
+                      remote.isInitializing
+                          ? 'Refreshing...'
+                          : 'Refresh Remote Library',
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              /// Downloaded Library
               const Text(
-                'Downloaded Addressables',
+                'Installed Mock Library',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 180,
                 child: _buildLibraryRow(
-                  items: availableDownloadedItems,
-                  emptyText: 'No downloaded animations',
+                  items: availableMockItems,
+                  emptyText: 'No matching follow-up animations available',
+                  useRemoteState: false,
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              /// Status
+              const Text(
+                'Remote Animation Library',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 210,
+                child: _buildLibraryRow(
+                  items: availableRemoteItems,
+                  emptyText: remote.isInitializing
+                      ? 'Loading remote library...'
+                      : 'No remote animations available',
+                  useRemoteState: true,
+                ),
+              ),
+              const SizedBox(height: 12),
               const Text(
                 'Addressables Status',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -248,15 +321,28 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 color: Colors.black26,
-                child: Text(
-                  remote.status,
-                  style: const TextStyle(fontSize: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(remote.status, style: const TextStyle(fontSize: 12)),
+                    if (remote.addressablesDirPath != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Local folder:\n${remote.addressablesDirPath}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                    if (remote.catalogPath != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Catalog path:\n${remote.catalogPath}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-
               const SizedBox(height: 12),
-
-              /// Current Sequence
               const Text(
                 'Current Sequence',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -267,9 +353,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 padding: const EdgeInsets.all(8),
                 color: Colors.black26,
                 child: controller.selectedAnimations.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Center(
                           child: Text('No animations selected yet'),
                         ),
                       )
@@ -280,13 +366,19 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         itemBuilder: (context, index) {
                           final item = controller.selectedAnimations[index];
 
-                          return ListTile(
-                            title: Text(item.title),
-                            subtitle: Text(item.animationName),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () =>
-                                  controller.removeAnimationAt(index),
+                          return Card(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            child: ListTile(
+                              leading: Text('${index + 1}'),
+                              title: Text(item.title),
+                              subtitle: Text(
+                                '${item.animationName}  •  ${item.startPosition} -> ${item.endPosition}',
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () =>
+                                    controller.removeAnimationAt(index),
+                              ),
                             ),
                           );
                         },

@@ -37,7 +37,7 @@ class _AppShellState extends State<AppShell> {
       unityService: widget.unityService,
     );
 
-    _remoteAddressablesService.refreshDownloadedStateFromDisk();
+    _remoteAddressablesService.initializeLibrary();
 
     _pages = <Widget>[
       const HomeScreen(),
@@ -62,18 +62,14 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  /// 🔥 MAIN PIPELINE (this is your "one button does everything")
   Future<void> buildAndOpenUnity() async {
-    // 1. Prepare addressables if needed
     await _remoteAddressablesService.ensureUnityPrepared();
 
-    // 2. Send sequence + load clips
     await widget.unityService.preparePreview(
       sequenceName: widget.sequenceController.sequenceName,
       animations: widget.sequenceController.getAnimationNamesForUnity(),
     );
 
-    // 3. Open Unity tab
     if (mounted) {
       setState(() {
         _currentIndex = 2;
@@ -99,9 +95,15 @@ class _AppShellState extends State<AppShell> {
 
           if (index == 2) {
             await _openUnityPreview();
+          } else {
+            if (mounted) {
+              setState(() {
+                _currentIndex = index;
+              });
+            }
           }
 
-          if (mounted) {
+          if (index == 2 && mounted) {
             setState(() {
               _currentIndex = index;
             });
