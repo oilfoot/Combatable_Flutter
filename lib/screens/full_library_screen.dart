@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../widgets/animation_info_sheet.dart';
 import '../widgets/animation_library_card.dart';
@@ -73,7 +74,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final library = widget.libraryController;
-    final remote = library.remoteAddressablesService;
+    final theme = Theme.of(context);
 
     var items = _showRecommendedOnly
         ? library.recommendedNextItems
@@ -85,7 +86,13 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
     }).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Full Library')),
+      appBar: AppBar(
+        title: const Text('Full Library'),
+        scrolledUnderElevation: 0,
+        elevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -140,18 +147,6 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                           });
                         },
                       ),
-                      ActionChip(
-                        label: Text(
-                          remote.isInitializing
-                              ? 'Refreshing...'
-                              : 'Refresh Library',
-                        ),
-                        onPressed: remote.isInitializing
-                            ? null
-                            : () async {
-                                await library.refreshLibrary();
-                              },
-                      ),
                     ],
                   ),
                 ],
@@ -163,13 +158,18 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                       child: Text('No animations match your filters'),
                     )
                   : GridView.builder(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.fromLTRB(
+                        12,
+                        12,
+                        12,
+                        AppShell.floatingNavExtraScrollSpace,
+                      ),
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
                             mainAxisSpacing: 12,
                             crossAxisSpacing: 12,
-                            childAspectRatio: 0.92,
+                            childAspectRatio: 0.78,
                           ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {

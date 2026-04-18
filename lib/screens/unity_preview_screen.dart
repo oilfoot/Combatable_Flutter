@@ -41,7 +41,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: widget.embeddedInTab ? AppBar(title: const Text('Unity')) : null,
+      backgroundColor: Colors.black,
       body: UnityView(
         bridge: widget.unityService.bridge,
         config: const UnityConfig(
@@ -52,6 +52,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
         placeholder: const Center(child: CircularProgressIndicator()),
         onReady: (bridge) async {
           widget.unityService.markUnityReady();
+
           await widget.unityService.sendSequenceWhenReady(
             sequenceName: widget.sequenceController.sequenceName,
             animations: widget.sequenceController.getAnimationNamesForUnity(),

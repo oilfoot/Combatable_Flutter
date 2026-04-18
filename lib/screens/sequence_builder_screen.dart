@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
 import '../widgets/animation_info_sheet.dart';
@@ -27,6 +28,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   @override
   void initState() {
     super.initState();
+
     _sequenceNameController = TextEditingController(
       text: widget.sequenceController.sequenceName,
     );
@@ -121,15 +123,20 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
     final library = widget.libraryController;
-    final remote = library.remoteAddressablesService;
-
     final recommendedItems = library.recommendedNextItems;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sequence Builder')),
+      appBar: AppBar(
+        title: const Text('Sequence Builder'),
+        scrolledUnderElevation: 0,
+        elevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        surfaceTintColor: Colors.transparent,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -156,39 +163,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ElevatedButton(
-                    onPressed: () => sequence.loadQuickTestData(
-                      library.allItems.map((e) => e.item).toList(),
-                    ),
-                    child: const Text('Quick Test'),
-                  ),
-                  ElevatedButton(
-                    onPressed: sequence.clearAnimations,
-                    child: const Text('Clear List'),
-                  ),
-                  ElevatedButton(
-                    onPressed: remote.isInitializing
-                        ? null
-                        : library.refreshLibrary,
-                    child: Text(
-                      remote.isInitializing
-                          ? 'Refreshing...'
-                          : 'Refresh Library',
-                    ),
-                  ),
-                ],
-              ),
               const SizedBox(height: 16),
               Text(
                 sequence.requiredNextStartPosition == null
                     ? 'Next position: Any'
                     : 'Required next start: ${sequence.requiredNextStartPosition}',
-                style: Theme.of(context).textTheme.titleMedium,
+                style: theme.textTheme.titleMedium,
               ),
               const SizedBox(height: 12),
               const Text(
@@ -200,41 +180,21 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 height: 220,
                 child: _buildRecommendedRow(recommendedItems),
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Library Status',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: Colors.black26,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(remote.status, style: const TextStyle(fontSize: 12)),
-                    if (remote.addressablesDirPath != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Local folder:\n${remote.addressablesDirPath}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                    if (remote.catalogPath != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Catalog path:\n${remote.catalogPath}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Current Sequence',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Current Sequence',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  if (sequence.selectedAnimations.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: sequence.clearAnimations,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Clear All'),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               Container(
@@ -273,6 +233,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         },
                       ),
               ),
+              const SizedBox(height: AppShell.floatingNavExtraScrollSpace),
             ],
           ),
         ),
