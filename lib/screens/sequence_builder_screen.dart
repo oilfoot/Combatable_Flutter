@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
-import '../data/mock_animation_library.dart';
-import '../models/animation_library_item.dart';
-import '../services/remote_addressables_service.dart';
+import '../widgets/animation_info_sheet.dart';
+import '../widgets/animation_library_card.dart';
 
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
     super.key,
     required this.sequenceController,
-    required this.remoteAddressablesService,
+    required this.libraryController,
     required this.onBuildUnitySequence,
   });
 
   final SequenceController sequenceController;
-  final RemoteAddressablesService remoteAddressablesService;
+  final LibraryController libraryController;
   final Future<void> Function() onBuildUnitySequence;
 
   @override
@@ -23,26 +23,22 @@ class SequenceBuilderScreen extends StatefulWidget {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   late final TextEditingController _sequenceNameController;
-  late final RemoteAddressablesService _remoteAddressablesService;
 
   @override
   void initState() {
     super.initState();
-
     _sequenceNameController = TextEditingController(
       text: widget.sequenceController.sequenceName,
     );
 
-    _remoteAddressablesService = widget.remoteAddressablesService;
-
     widget.sequenceController.addListener(_onControllerChanged);
-    _remoteAddressablesService.addListener(_onRemoteChanged);
+    widget.libraryController.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
     widget.sequenceController.removeListener(_onControllerChanged);
-    _remoteAddressablesService.removeListener(_onRemoteChanged);
+    widget.libraryController.removeListener(_onControllerChanged);
     _sequenceNameController.dispose();
     super.dispose();
   }
@@ -61,47 +57,44 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     }
   }
 
-  void _onRemoteChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+  Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
+    await AnimationInfoSheet.show(
+      context,
+      item: entry.item,
+      isDownloaded: entry.isInstalled,
+      isDownloading: entry.isDownloading,
+      buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+      onPrimaryAction: () async {
+        try {
+          await widget.libraryController.performPrimaryAction(entry);
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
+          );
+        }
+      },
+    );
   }
 
-  void _addLibraryItem(AnimationLibraryItem item) {
-    widget.sequenceController.addAnimationItem(item);
-  }
-
-  Future<void> _handleRemoteItemTap(AnimationLibraryItem item) async {
+  Future<void> _handlePrimaryAction(LibraryDisplayItem entry) async {
     try {
-      final isDownloaded = _remoteAddressablesService.isAnimationDownloaded(
-        item.animationName,
-      );
-
-      if (!isDownloaded) {
-        await _remoteAddressablesService.downloadAnimation(item.animationName);
-      }
-
-      _addLibraryItem(item);
+      await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to download/add ${item.title}: $e')),
+        SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
     }
   }
 
-  Widget _buildLibraryRow({
-    required List<AnimationLibraryItem> items,
-    required String emptyText,
-    required bool useRemoteState,
-  }) {
+  Widget _buildRecommendedRow(List<LibraryDisplayItem> items) {
     if (items.isEmpty) {
       return Container(
         width: double.infinity,
         alignment: Alignment.center,
         color: Colors.black12,
-        child: Text(emptyText),
+        child: const Text('No valid next animations available'),
       );
     }
 
@@ -109,103 +102,16 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       scrollDirection: Axis.horizontal,
       itemCount: items.length,
       itemBuilder: (context, index) {
-        final item = items[index];
+        final entry = items[index];
 
-        final isDownloaded = useRemoteState
-            ? _remoteAddressablesService.isAnimationDownloaded(
-                item.animationName,
-              )
-            : true;
-
-        final isDownloading = useRemoteState
-            ? _remoteAddressablesService.isAnimationDownloading(
-                item.animationName,
-              )
-            : false;
-
-        final buttonText = useRemoteState
-            ? isDownloading
-                  ? 'Downloading...'
-                  : isDownloaded
-                  ? 'Add'
-                  : 'Download & Add'
-            : 'Add';
-
-        return SizedBox(
-          width: 240,
-          child: Card(
-            margin: const EdgeInsets.only(right: 10),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Clip: ${item.animationName}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Start: ${item.startPosition}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    'End: ${item.endPosition}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  if (useRemoteState)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDownloaded
-                            ? Colors.green.shade100
-                            : Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        isDownloaded ? 'Installed' : 'Not installed',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDownloaded
-                              ? Colors.green.shade900
-                              : Colors.orange.shade900,
-                        ),
-                      ),
-                    ),
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: isDownloading
-                          ? null
-                          : () async {
-                              if (useRemoteState) {
-                                await _handleRemoteItemTap(item);
-                              } else {
-                                _addLibraryItem(item);
-                              }
-                            },
-                      child: Text(buttonText),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        return AnimationLibraryCard(
+          item: entry.item,
+          isDownloaded: entry.isInstalled,
+          isDownloading: entry.isDownloading,
+          showStatus: entry.isRemote,
+          buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+          onTap: () => _showAnimationInfo(entry),
+          onPrimaryAction: () => _handlePrimaryAction(entry),
         );
       },
     );
@@ -213,16 +119,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final controller = widget.sequenceController;
-    final remote = _remoteAddressablesService;
+    final sequence = widget.sequenceController;
+    final library = widget.libraryController;
+    final remote = library.remoteAddressablesService;
 
-    final availableMockItems = controller.getAvailableLibraryItems(
-      mockAnimationLibrary,
-    );
-
-    final availableRemoteItems = controller.getAvailableLibraryItems(
-      remote.availableItems,
-    );
+    final recommendedItems = library.recommendedNextItems;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sequence Builder')),
@@ -238,7 +139,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                   labelText: 'Sequence name',
                   border: OutlineInputBorder(),
                 ),
-                onChanged: controller.setSequenceName,
+                onChanged: sequence.setSequenceName,
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -261,59 +162,47 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 runSpacing: 8,
                 children: [
                   ElevatedButton(
-                    onPressed: () =>
-                        controller.loadQuickTestData(mockAnimationLibrary),
+                    onPressed: () => sequence.loadQuickTestData(
+                      library.allItems.map((e) => e.item).toList(),
+                    ),
                     child: const Text('Quick Test'),
                   ),
                   ElevatedButton(
-                    onPressed: controller.clearAnimations,
+                    onPressed: sequence.clearAnimations,
                     child: const Text('Clear List'),
                   ),
                   ElevatedButton(
                     onPressed: remote.isInitializing
                         ? null
-                        : remote.refreshLibrary,
+                        : library.refreshLibrary,
                     child: Text(
                       remote.isInitializing
                           ? 'Refreshing...'
-                          : 'Refresh Remote Library',
+                          : 'Refresh Library',
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              Text(
+                sequence.requiredNextStartPosition == null
+                    ? 'Next position: Any'
+                    : 'Required next start: ${sequence.requiredNextStartPosition}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 12),
               const Text(
-                'Installed Mock Library',
+                'Recommended Next Animations',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               SizedBox(
-                height: 180,
-                child: _buildLibraryRow(
-                  items: availableMockItems,
-                  emptyText: 'No matching follow-up animations available',
-                  useRemoteState: false,
-                ),
+                height: 220,
+                child: _buildRecommendedRow(recommendedItems),
               ),
               const SizedBox(height: 12),
               const Text(
-                'Remote Animation Library',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 210,
-                child: _buildLibraryRow(
-                  items: availableRemoteItems,
-                  emptyText: remote.isInitializing
-                      ? 'Loading remote library...'
-                      : 'No remote animations available',
-                  useRemoteState: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Addressables Status',
+                'Library Status',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -352,7 +241,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(8),
                 color: Colors.black26,
-                child: controller.selectedAnimations.isEmpty
+                child: sequence.selectedAnimations.isEmpty
                     ? const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
                         child: Center(
@@ -362,9 +251,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     : ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: controller.selectedAnimations.length,
+                        itemCount: sequence.selectedAnimations.length,
                         itemBuilder: (context, index) {
-                          final item = controller.selectedAnimations[index];
+                          final item = sequence.selectedAnimations[index];
 
                           return Card(
                             margin: const EdgeInsets.symmetric(vertical: 4),
@@ -377,7 +266,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_outline),
                                 onPressed: () =>
-                                    controller.removeAnimationAt(index),
+                                    sequence.removeAnimationAt(index),
                               ),
                             ),
                           );
