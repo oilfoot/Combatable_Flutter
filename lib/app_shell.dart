@@ -57,17 +57,17 @@ class _AppShellState extends State<AppShell> {
 
     _pages = [
       const HomeScreen(),
-      SequenceBuilderScreen(
-        sequenceController: widget.sequenceController,
-        libraryController: _libraryController,
-        onBuildUnitySequence: buildAndOpenUnity,
-      ),
+      FullLibraryScreen(libraryController: _libraryController),
       UnityPreviewScreen(
         unityService: widget.unityService,
         sequenceController: widget.sequenceController,
         embeddedInTab: true,
       ),
-      FullLibraryScreen(libraryController: _libraryController),
+      SequenceBuilderScreen(
+        sequenceController: widget.sequenceController,
+        libraryController: _libraryController,
+        onBuildUnitySequence: buildAndOpenUnity,
+      ),
       const ProfileScreen(),
     ];
   }

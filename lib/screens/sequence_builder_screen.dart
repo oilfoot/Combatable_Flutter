@@ -71,6 +71,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           await widget.libraryController.performPrimaryAction(entry);
         } catch (e) {
           if (!mounted) return;
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
           );
@@ -84,6 +85,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
@@ -135,8 +137,14 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
+        bottom: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            AppShell.floatingNavExtraScrollSpace,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -221,7 +229,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                               leading: Text('${index + 1}'),
                               title: Text(item.title),
                               subtitle: Text(
-                                '${item.animationName}  •  ${item.startPosition} -> ${item.endPosition}',
+                                '${item.animationName} • ${item.startPosition} -> ${item.endPosition}',
                               ),
                               trailing: IconButton(
                                 icon: const Icon(Icons.delete_outline),
@@ -233,7 +241,6 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         },
                       ),
               ),
-              const SizedBox(height: AppShell.floatingNavExtraScrollSpace),
             ],
           ),
         ),

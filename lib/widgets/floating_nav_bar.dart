@@ -57,19 +57,19 @@ class FloatingNavBar extends StatelessWidget {
                   onTap: () => onTap(0),
                 ),
                 _NavButton(
-                  icon: Icons.playlist_add_rounded,
+                  icon: Icons.grid_view_rounded,
                   isSelected: currentIndex == 1,
                   onPressStart: onNavPressed,
                   onTap: () => onTap(1),
                 ),
                 _NavButton(
-                  icon: Icons.view_in_ar_rounded,
+                  icon: Icons.deployed_code,
                   isSelected: currentIndex == 2,
                   onPressStart: onNavPressed,
                   onTap: () => onTap(2),
                 ),
                 _NavButton(
-                  icon: Icons.grid_view_rounded,
+                  icon: Icons.playlist_add_rounded,
                   isSelected: currentIndex == 3,
                   onPressStart: onNavPressed,
                   onTap: () => onTap(3),

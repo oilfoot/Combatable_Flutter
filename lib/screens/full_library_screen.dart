@@ -52,6 +52,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           await widget.libraryController.performPrimaryAction(entry);
         } catch (e) {
           if (!mounted) return;
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
           );
@@ -65,6 +66,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
@@ -94,6 +96,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Padding(

@@ -1,8 +1,10 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../app_shell.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -15,7 +17,7 @@ class HomeScreen extends StatelessWidget {
       await addressablesDir.create(recursive: true);
     }
 
-    final files = <String>[
+    final files = [
       'catalog_0.1.0.hash',
       'catalog_0.1.0.bin',
       'remotegroup_assets_all_c8ca3e9e6d0cf52e5ccc935ebcb07b4f.bundle',
@@ -47,6 +49,7 @@ ${downloadedFiles.join('\n')}
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
+        bottom: false,
         child: Center(
           child: FutureBuilder<String>(
             future: _ensureAddressablesDownloaded(),
@@ -56,8 +59,13 @@ ${downloadedFiles.join('\n')}
               }
 
               if (snapshot.hasError) {
-                return Padding(
-                  padding: const EdgeInsets.all(24),
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(
+                    24,
+                    24,
+                    24,
+                    AppShell.floatingNavExtraScrollSpace,
+                  ),
                   child: Text(
                     'Error:\n${snapshot.error}',
                     textAlign: TextAlign.center,
@@ -67,7 +75,12 @@ ${downloadedFiles.join('\n')}
               }
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(
+                  24,
+                  24,
+                  24,
+                  AppShell.floatingNavExtraScrollSpace,
+                ),
                 child: Text(
                   snapshot.data ?? 'No data.',
                   textAlign: TextAlign.center,
