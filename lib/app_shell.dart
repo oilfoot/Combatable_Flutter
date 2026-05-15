@@ -25,6 +25,8 @@ class AppShell extends StatefulWidget {
 
   static const double floatingNavHorizontalPadding = 16;
   static const double floatingNavBottomSpacing = 8;
+
+  /// Use this later inside scrollable screens for bottom spacing.
   static const double floatingNavExtraScrollSpace = 130;
 
   @override
@@ -53,7 +55,7 @@ class _AppShellState extends State<AppShell> {
 
     _remoteAddressablesService.initializeLibrary();
 
-    _pages = <Widget>[
+    _pages = [
       const HomeScreen(),
       SequenceBuilderScreen(
         sequenceController: widget.sequenceController,
@@ -104,6 +106,7 @@ class _AppShellState extends State<AppShell> {
 
     if (index == 2) {
       await _openUnityPreview();
+
       if (!mounted) return;
       setState(() {
         _currentIndex = 2;
@@ -120,6 +123,7 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final bottomSafeInset = MediaQuery.of(context).padding.bottom;
+
     final navBottom = math.max(
       AppShell.floatingNavBottomSpacing,
       bottomSafeInset,
