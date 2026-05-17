@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:unity_kit/unity_kit.dart';
 
@@ -11,10 +13,14 @@ class UnityService {
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
 
+  final StreamController<double> _timelineController =
+      StreamController<double>.broadcast();
+
   StreamSubscription? _messageSub;
   StreamSubscription? _sceneSub;
 
   Stream<String> get logs => _logController.stream;
+  Stream<double> get timelineValues => _timelineController.stream;
 
   bool get isInitialized => _isInitialized;
   bool get isUnityReady => _isUnityReady;
@@ -25,11 +31,7 @@ class UnityService {
     bridge = UnityBridgeImpl(platform: UnityKitPlatform.instance);
     await bridge.initialize();
 
-    _messageSub = bridge.messageStream.listen((message) {
-      _log(
-        "Flutter received from Unity => type=${message.type}, data=${message.data}",
-      );
-    });
+    _messageSub = bridge.messageStream.listen(handleUnityMessage);
 
     _sceneSub = bridge.sceneStream.listen((scene) {
       _log("Scene loaded => ${scene.name}");
@@ -37,6 +39,51 @@ class UnityService {
 
     _isInitialized = true;
     _log("UnityService initialized");
+  }
+
+  void handleUnityMessage(UnityMessage message) {
+    developer.log(
+      "🔥 UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
+      name: "UnityService",
+    );
+
+    _log(
+      "🔥 UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
+    );
+
+    if (message.type == 'timeline_position') {
+      final value = _extractTimelineValue(message.data);
+
+      developer.log("🔥 PARSED TIMELINE VALUE: $value", name: "UnityService");
+
+      _log("🔥 PARSED TIMELINE VALUE: $value");
+
+      if (value != null && !_timelineController.isClosed) {
+        _timelineController.add(value);
+      }
+    }
+  }
+
+  double? _extractTimelineValue(dynamic data) {
+    try {
+      if (data is Map) {
+        final value = data['value'];
+        if (value is num) return value.toDouble().clamp(0.0, 1.0);
+      }
+
+      if (data is String) {
+        final decoded = jsonDecode(data);
+
+        if (decoded is Map) {
+          final value = decoded['value'];
+          if (value is num) return value.toDouble().clamp(0.0, 1.0);
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
   }
 
   void markUnityReady() {
@@ -53,9 +100,7 @@ class UnityService {
     required String sequenceName,
     required List<String> animations,
   }) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     final msg = UnityMessage.to(
       'FlutterSequenceReceiver',
@@ -74,9 +119,7 @@ class UnityService {
     required String sequenceName,
     required List<String> animations,
   }) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     final msg = UnityMessage.to(
       'FlutterSequenceReceiver',
@@ -94,9 +137,7 @@ class UnityService {
   Future<void> loadLocalAddressablesCatalog({
     required String catalogPath,
   }) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     final msg = UnityMessage.to(
       'LocalAddressablesReceiver',
@@ -110,9 +151,7 @@ class UnityService {
   }
 
   Future<void> registerDownloadedJson({required String jsonPath}) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     final msg = UnityMessage.to(
       'DownloadedJsonReceiver',
@@ -128,9 +167,7 @@ class UnityService {
   Future<void> registerDownloadedJsonFiles({
     required List<String> jsonPaths,
   }) async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     for (final jsonPath in jsonPaths) {
       if (jsonPath.trim().isEmpty) continue;
@@ -138,10 +175,48 @@ class UnityService {
     }
   }
 
+  Future<void> beginTimelineScrub() async {
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
+
+    final msg = UnityMessage.to(
+      'FlutterUIBridge',
+      'BeginTimelineScrub',
+      <String, dynamic>{},
+    );
+
+    await bridge.sendWhenReady(msg);
+    _log("Sent BeginTimelineScrub to Unity.");
+  }
+
+  Future<void> setTimelineValue(double value) async {
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
+
+    final clampedValue = value.clamp(0.0, 1.0);
+
+    final msg = UnityMessage.to(
+      'FlutterUIBridge',
+      'SetTimelineValue',
+      <String, dynamic>{'value': clampedValue},
+    );
+
+    await bridge.sendWhenReady(msg);
+  }
+
+  Future<void> endTimelineScrub() async {
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
+
+    final msg = UnityMessage.to(
+      'FlutterUIBridge',
+      'EndTimelineScrub',
+      <String, dynamic>{},
+    );
+
+    await bridge.sendWhenReady(msg);
+    _log("Sent EndTimelineScrub to Unity.");
+  }
+
   Future<void> loadCurrentSequenceClips() async {
-    if (!_isInitialized) {
-      throw Exception("UnityService is not initialized.");
-    }
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
     final msg = UnityMessage.to(
       'AddressableClipLoaderReceiver',
@@ -201,6 +276,7 @@ class UnityService {
   Future<void> dispose() async {
     await _messageSub?.cancel();
     await _sceneSub?.cancel();
+    await _timelineController.close();
     await _logController.close();
 
     if (_isInitialized) {

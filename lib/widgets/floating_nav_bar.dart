@@ -63,7 +63,7 @@ class FloatingNavBar extends StatelessWidget {
                   onTap: () => onTap(1),
                 ),
                 _NavButton(
-                  icon: Icons.deployed_code,
+                  icon: Icons.view_in_ar,
                   isSelected: currentIndex == 2,
                   onPressStart: onNavPressed,
                   onTap: () => onTap(2),
