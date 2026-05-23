@@ -16,11 +16,15 @@ class UnityService {
   final StreamController<double> _timelineController =
       StreamController<double>.broadcast();
 
+  final StreamController<String> _testWordController =
+      StreamController<String>.broadcast();
+
   StreamSubscription? _messageSub;
   StreamSubscription? _sceneSub;
 
   Stream<String> get logs => _logController.stream;
   Stream<double> get timelineValues => _timelineController.stream;
+  Stream<String> get testWords => _testWordController.stream;
 
   bool get isInitialized => _isInitialized;
   bool get isUnityReady => _isUnityReady;
@@ -55,11 +59,21 @@ class UnityService {
       final value = _extractTimelineValue(message.data);
 
       developer.log("🔥 PARSED TIMELINE VALUE: $value", name: "UnityService");
-
       _log("🔥 PARSED TIMELINE VALUE: $value");
 
       if (value != null && !_timelineController.isClosed) {
         _timelineController.add(value);
+      }
+    }
+
+    if (message.type == 'unity_test_word') {
+      final word = _extractTestWord(message.data);
+
+      developer.log("🧪 UNITY TEST WORD: $word", name: "UnityService");
+      _log("🧪 UNITY TEST WORD: $word");
+
+      if (word != null && !_testWordController.isClosed) {
+        _testWordController.add(word);
       }
     }
   }
@@ -84,6 +98,41 @@ class UnityService {
     }
 
     return null;
+  }
+
+  String? _extractTestWord(dynamic data) {
+    try {
+      if (data is Map) {
+        final word = data['word'];
+        if (word is String) return word;
+      }
+
+      if (data is String) {
+        final decoded = jsonDecode(data);
+
+        if (decoded is Map) {
+          final word = decoded['word'];
+          if (word is String) return word;
+        }
+      }
+    } catch (_) {
+      return null;
+    }
+
+    return null;
+  }
+
+  Future<void> requestTestWord() async {
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
+
+    final msg = UnityMessage.to(
+      'UnityToFlutterTestBridge',
+      'RequestTestWord',
+      <String, dynamic>{},
+    );
+
+    await bridge.sendWhenReady(msg);
+    _log("Requested test word from Unity.");
   }
 
   void markUnityReady() {
@@ -276,7 +325,9 @@ class UnityService {
   Future<void> dispose() async {
     await _messageSub?.cancel();
     await _sceneSub?.cancel();
+
     await _timelineController.close();
+    await _testWordController.close();
     await _logController.close();
 
     if (_isInitialized) {

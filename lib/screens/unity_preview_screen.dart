@@ -24,9 +24,12 @@ class UnityPreviewScreen extends StatefulWidget {
 
 class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   StreamSubscription<double>? _timelineSub;
+  StreamSubscription<String>? _testWordSub;
 
   double _timelineValue = 0.0;
   bool _isScrubbing = false;
+
+  String _unityTestWord = "No word received yet";
 
   @override
   void initState() {
@@ -37,6 +40,14 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
 
       setState(() {
         _timelineValue = value.clamp(0.0, 1.0);
+      });
+    });
+
+    _testWordSub = widget.unityService.testWords.listen((word) {
+      if (!mounted) return;
+
+      setState(() {
+        _unityTestWord = word;
       });
     });
 
@@ -85,6 +96,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   @override
   void dispose() {
     _timelineSub?.cancel();
+    _testWordSub?.cancel();
     super.dispose();
   }
 
@@ -107,6 +119,9 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
             onReady: (bridge) async {
               widget.unityService.markUnityReady();
 
+              await Future.delayed(const Duration(milliseconds: 500));
+              await widget.unityService.requestTestWord();
+
               await widget.unityService.sendSequenceWhenReady(
                 sequenceName: widget.sequenceController.sequenceName,
                 animations: widget.sequenceController
@@ -119,16 +134,37 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
             },
             onMessage: (message) {
               widget.unityService.handleUnityMessage(message);
-
-              if (mounted) {
-                setState(() {});
-              }
             },
             onSceneLoaded: (scene) {
               if (mounted) {
                 setState(() {});
               }
             },
+          ),
+
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 180,
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.15)),
+                ),
+                child: Text(
+                  _unityTestWord,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
           ),
 
           Positioned(
