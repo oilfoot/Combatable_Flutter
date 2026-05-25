@@ -8,6 +8,20 @@ import 'package:path_provider/path_provider.dart';
 import '../models/animation_library_item.dart';
 import 'unity_service.dart';
 
+class RemoteAnimationCategory {
+  const RemoteAnimationCategory({
+    required this.id,
+    required this.displayName,
+    required this.manifest,
+    required this.count,
+  });
+
+  final String id;
+  final String displayName;
+  final String manifest;
+  final int count;
+}
+
 class RemoteAddressablesService extends ChangeNotifier {
   RemoteAddressablesService({
     required UnityService unityService,
@@ -19,38 +33,41 @@ class RemoteAddressablesService extends ChangeNotifier {
   final FirebaseStorage _firebaseStorage;
 
   static const String _remoteFolder = 'addressables/iOS';
-  static const String _manifestFileName = 'addressables_manifest.json';
+  static const String _mainManifestFileName = 'main_manifest.json';
 
   String _status = 'Remote library not loaded yet.';
   String? _addressablesDirPath;
   String? _catalogPath;
+
   bool _isInitializing = false;
   bool _isSendingCatalog = false;
   bool _isUnityPrepared = false;
 
-  _AddressablesManifest? _manifest;
+  _MainManifest? _manifest;
 
-  final List<AnimationLibraryItem> _availableItems = <AnimationLibraryItem>[];
-  final List<AnimationLibraryItem> _downloadedItems = <AnimationLibraryItem>[];
-  final List<String> _downloadedJsonPaths = <String>[];
+  final List<RemoteAnimationCategory> _categories = [];
+  final List<AnimationLibraryItem> _availableItems = [];
+  final List<AnimationLibraryItem> _downloadedItems = [];
+  final List<String> _downloadedJsonPaths = [];
 
-  final Set<String> _downloadedKeys = <String>{};
-  final Set<String> _downloadingKeys = <String>{};
+  final Set<String> _downloadedKeys = {};
+  final Set<String> _downloadingKeys = {};
 
   String get status => _status;
   String? get addressablesDirPath => _addressablesDirPath;
   String? get catalogPath => _catalogPath;
+
   bool get isInitializing => _isInitializing;
   bool get isSendingCatalog => _isSendingCatalog;
 
+  List<RemoteAnimationCategory> get categories =>
+      List.unmodifiable(_categories);
   List<AnimationLibraryItem> get availableItems =>
-      List<AnimationLibraryItem>.unmodifiable(_availableItems);
-
+      List.unmodifiable(_availableItems);
   List<AnimationLibraryItem> get downloadedItems =>
-      List<AnimationLibraryItem>.unmodifiable(_downloadedItems);
-
+      List.unmodifiable(_downloadedItems);
   List<String> get downloadedJsonPaths =>
-      List<String>.unmodifiable(_downloadedJsonPaths);
+      List.unmodifiable(_downloadedJsonPaths);
 
   bool get hasDownloadedContent =>
       _catalogPath != null &&
@@ -82,7 +99,8 @@ class RemoteAddressablesService extends ChangeNotifier {
 
       _addressablesDirPath = addressablesDir.path;
 
-      await _downloadManifestToLocal(addressablesDir: addressablesDir);
+      await _downloadMainManifestToLocal(addressablesDir: addressablesDir);
+      await _downloadCategoryManifestsToLocal(addressablesDir: addressablesDir);
       await _restoreStateFromDisk(addressablesDir: addressablesDir);
 
       _status =
@@ -103,6 +121,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   Future<void> downloadAnimation(String addressKey) async {
     final trimmedKey = addressKey.trim();
+
     if (trimmedKey.isEmpty) {
       throw Exception('addressKey is empty.');
     }
@@ -111,12 +130,13 @@ class RemoteAddressablesService extends ChangeNotifier {
     if (isAnimationDownloaded(trimmedKey)) return;
 
     final entry = _findEntry(trimmedKey);
+
     if (entry == null) {
       throw Exception('No manifest entry found for "$trimmedKey".');
     }
 
     _downloadingKeys.add(trimmedKey);
-    _status = 'Downloading ${entry.title}...';
+    _status = 'Downloading ${entry.displayName}...';
     notifyListeners();
 
     try {
@@ -131,22 +151,32 @@ class RemoteAddressablesService extends ChangeNotifier {
 
       await _ensureCoreFilesDownloaded(addressablesDir: addressablesDir);
 
-      final localJsonFile = File('${addressablesDir.path}/${entry.jsonFile}');
-      await _firebaseStorage
-          .ref('$_remoteFolder/${entry.jsonFile}')
-          .writeToFile(localJsonFile);
-
-      final localBundleFile = File(
-        '${addressablesDir.path}/${entry.bundleFile}',
+      final localStepsFile = _localFileForRemotePath(
+        addressablesDir: addressablesDir,
+        remotePath: entry.stepsFile,
       );
+
+      await localStepsFile.parent.create(recursive: true);
+
       await _firebaseStorage
-          .ref('$_remoteFolder/${entry.bundleFile}')
+          .ref(_storageRefPath(entry.stepsFile))
+          .writeToFile(localStepsFile);
+
+      final localBundleFile = _localFileForRemotePath(
+        addressablesDir: addressablesDir,
+        remotePath: entry.bundle,
+      );
+
+      await localBundleFile.parent.create(recursive: true);
+
+      await _firebaseStorage
+          .ref(_storageRefPath(entry.bundle))
           .writeToFile(localBundleFile);
 
       _downloadedKeys.add(trimmedKey);
 
-      if (!_downloadedJsonPaths.contains(localJsonFile.path)) {
-        _downloadedJsonPaths.add(localJsonFile.path);
+      if (!_downloadedJsonPaths.contains(localStepsFile.path)) {
+        _downloadedJsonPaths.add(localStepsFile.path);
       }
 
       _rebuildDownloadedItems();
@@ -154,7 +184,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       _isUnityPrepared = false;
 
       _status =
-          'Downloaded ${entry.title}.\n'
+          'Downloaded ${entry.displayName}.\n'
           'Available: ${_availableItems.length}\n'
           'Downloaded: ${_downloadedItems.length}';
 
@@ -202,6 +232,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       }
 
       _isUnityPrepared = true;
+
       _status =
           'Unity prepared.\n'
           'Catalog: $_catalogPath\n'
@@ -219,20 +250,44 @@ class RemoteAddressablesService extends ChangeNotifier {
     _isUnityPrepared = false;
   }
 
-  Future<void> _downloadManifestToLocal({
+  Future<void> _downloadMainManifestToLocal({
     required Directory addressablesDir,
   }) async {
     final manifestRef = _firebaseStorage.ref(
-      '$_remoteFolder/$_manifestFileName',
+      '$_remoteFolder/$_mainManifestFileName',
     );
+
     final manifestLocalFile = File(
-      '${addressablesDir.path}/$_manifestFileName',
+      '${addressablesDir.path}/$_mainManifestFileName',
     );
 
     await manifestRef.writeToFile(manifestLocalFile);
 
     if (!await manifestLocalFile.exists()) {
-      throw Exception('Manifest file was not downloaded.');
+      throw Exception('Main manifest file was not downloaded.');
+    }
+
+    final manifestContent = await manifestLocalFile.readAsString();
+    _manifest = _parseMainManifest(manifestContent);
+  }
+
+  Future<void> _downloadCategoryManifestsToLocal({
+    required Directory addressablesDir,
+  }) async {
+    final manifest = _manifest;
+
+    if (manifest == null) {
+      throw Exception('Main manifest is not loaded.');
+    }
+
+    for (final category in manifest.categories) {
+      final localFile = File('${addressablesDir.path}/${category.manifest}');
+
+      await localFile.parent.create(recursive: true);
+
+      await _firebaseStorage
+          .ref('$_remoteFolder/${category.manifest}')
+          .writeToFile(localFile);
     }
   }
 
@@ -240,20 +295,15 @@ class RemoteAddressablesService extends ChangeNotifier {
     required Directory addressablesDir,
   }) async {
     final manifest = _manifest;
-    if (manifest == null) {
-      throw Exception('Manifest is not loaded.');
-    }
 
-    final manifestLocalFile = File(
-      '${addressablesDir.path}/$_manifestFileName',
-    );
-    if (!await manifestLocalFile.exists()) {
-      await _downloadManifestToLocal(addressablesDir: addressablesDir);
+    if (manifest == null) {
+      throw Exception('Main manifest is not loaded.');
     }
 
     final catalogLocalFile = File(
       '${addressablesDir.path}/${manifest.catalogFile}',
     );
+
     if (!await catalogLocalFile.exists()) {
       await _firebaseStorage
           .ref('$_remoteFolder/${manifest.catalogFile}')
@@ -266,6 +316,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       final hashLocalFile = File(
         '${addressablesDir.path}/${manifest.hashFile}',
       );
+
       if (!await hashLocalFile.exists()) {
         await _firebaseStorage
             .ref('$_remoteFolder/${manifest.hashFile}')
@@ -277,46 +328,76 @@ class RemoteAddressablesService extends ChangeNotifier {
   Future<void> _restoreStateFromDisk({
     required Directory addressablesDir,
   }) async {
-    final manifestFile = File('${addressablesDir.path}/$_manifestFileName');
+    final manifestFile = File('${addressablesDir.path}/$_mainManifestFileName');
+
     if (!await manifestFile.exists()) {
-      throw Exception('Local manifest file does not exist.');
+      throw Exception('Local main manifest file does not exist.');
     }
 
     final manifestContent = await manifestFile.readAsString();
-    final manifest = _parseManifest(manifestContent);
-    _manifest = manifest;
+    final mainManifest = _parseMainManifest(manifestContent);
+
+    _manifest = mainManifest;
+
+    final allEntries = <_AnimationManifestEntry>[];
+
+    for (final category in mainManifest.categories) {
+      final categoryFile = File('${addressablesDir.path}/${category.manifest}');
+
+      if (!await categoryFile.exists()) {
+        continue;
+      }
+
+      final categoryContent = await categoryFile.readAsString();
+      final entries = _parseCategoryManifest(categoryContent);
+
+      allEntries.addAll(entries);
+    }
+
+    _manifest = mainManifest.copyWith(entries: allEntries);
+
+    _categories
+      ..clear()
+      ..addAll(
+        mainManifest.categories.map(
+          (category) => RemoteAnimationCategory(
+            id: category.id,
+            displayName: category.displayName,
+            manifest: category.manifest,
+            count: category.count,
+          ),
+        ),
+      );
 
     _availableItems
       ..clear()
-      ..addAll(
-        manifest.entries.map((entry) {
-          return AnimationLibraryItem(
-            title: entry.title,
-            animationName: entry.animationName,
-            startPosition: entry.startPosition,
-            endPosition: entry.endPosition,
-          );
-        }),
-      );
+      ..addAll(allEntries.map(_toLibraryItem));
 
-    final catalogFile = File('${addressablesDir.path}/${manifest.catalogFile}');
+    final catalogFile = File(
+      '${addressablesDir.path}/${mainManifest.catalogFile}',
+    );
     _catalogPath = await catalogFile.exists() ? catalogFile.path : null;
 
     _downloadedKeys.clear();
     _downloadedJsonPaths.clear();
 
-    for (final entry in manifest.entries) {
-      final localJsonFile = File('${addressablesDir.path}/${entry.jsonFile}');
-      final localBundleFile = File(
-        '${addressablesDir.path}/${entry.bundleFile}',
+    for (final entry in allEntries) {
+      final localStepsFile = _localFileForRemotePath(
+        addressablesDir: addressablesDir,
+        remotePath: entry.stepsFile,
       );
 
-      final hasJson = await localJsonFile.exists();
+      final localBundleFile = _localFileForRemotePath(
+        addressablesDir: addressablesDir,
+        remotePath: entry.bundle,
+      );
+
+      final hasSteps = await localStepsFile.exists();
       final hasBundle = await localBundleFile.exists();
 
-      if (hasJson && hasBundle) {
-        _downloadedKeys.add(entry.addressKey);
-        _downloadedJsonPaths.add(localJsonFile.path);
+      if (hasSteps && hasBundle) {
+        _downloadedKeys.add(entry.id);
+        _downloadedJsonPaths.add(localStepsFile.path);
       }
     }
 
@@ -326,6 +407,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   void _rebuildDownloadedItems() {
     final manifest = _manifest;
+
     if (manifest == null) {
       _downloadedItems.clear();
       return;
@@ -335,24 +417,18 @@ class RemoteAddressablesService extends ChangeNotifier {
       ..clear()
       ..addAll(
         manifest.entries
-            .where((entry) => _downloadedKeys.contains(entry.addressKey))
-            .map(
-              (entry) => AnimationLibraryItem(
-                title: entry.title,
-                animationName: entry.animationName,
-                startPosition: entry.startPosition,
-                endPosition: entry.endPosition,
-              ),
-            ),
+            .where((entry) => _downloadedKeys.contains(entry.id))
+            .map(_toLibraryItem),
       );
   }
 
-  _AddressablesManifestEntry? _findEntry(String addressKey) {
+  _AnimationManifestEntry? _findEntry(String addressKey) {
     final manifest = _manifest;
+
     if (manifest == null) return null;
 
     for (final entry in manifest.entries) {
-      if (entry.addressKey == addressKey) {
+      if (entry.id == addressKey) {
         return entry;
       }
     }
@@ -360,97 +436,234 @@ class RemoteAddressablesService extends ChangeNotifier {
     return null;
   }
 
-  _AddressablesManifest _parseManifest(String jsonString) {
+  AnimationLibraryItem _toLibraryItem(_AnimationManifestEntry entry) {
+    return AnimationLibraryItem(
+      title: entry.displayName,
+      animationName: entry.animationName,
+      addressKey: entry.id,
+      description: entry.description,
+      category: entry.category,
+      tags: entry.tags,
+      startPosition: entry.startPosition,
+      endPosition: entry.endPosition,
+      previewPath: entry.preview,
+    );
+  }
+
+  _MainManifest _parseMainManifest(String jsonString) {
     final decoded = jsonDecode(jsonString);
 
     if (decoded is! Map<String, dynamic>) {
-      throw Exception('Manifest must be a JSON object.');
+      throw Exception('Main manifest must be a JSON object.');
     }
 
+    final version = (decoded['version'] ?? '').toString().trim();
+    final platform = (decoded['platform'] ?? '').toString().trim();
     final catalogFile = (decoded['catalogFile'] ?? '').toString().trim();
     final hashFile = (decoded['hashFile'] ?? '').toString().trim();
 
     if (catalogFile.isEmpty) {
-      throw Exception('Manifest is missing catalogFile.');
+      throw Exception('Main manifest is missing catalogFile.');
     }
 
-    final rawEntries = decoded['entries'];
-    if (rawEntries is! List) {
-      throw Exception('Manifest is missing entries array.');
+    final rawCategories = decoded['categories'];
+
+    if (rawCategories is! List) {
+      throw Exception('Main manifest is missing categories array.');
     }
 
-    final entries = rawEntries.map<_AddressablesManifestEntry>((raw) {
+    final categories = rawCategories.map<_CategoryManifestRef>((raw) {
       if (raw is! Map<String, dynamic>) {
-        throw Exception('Manifest entry is not a JSON object.');
+        throw Exception('Category entry is not a JSON object.');
       }
 
-      final addressKey = (raw['addressKey'] ?? '').toString().trim();
-      final title = (raw['title'] ?? '').toString().trim();
-      final animationName = (raw['animationName'] ?? '').toString().trim();
-      final startPosition = (raw['startPosition'] ?? '').toString().trim();
-      final endPosition = (raw['endPosition'] ?? '').toString().trim();
-      final jsonFile = (raw['jsonFile'] ?? '').toString().trim();
-      final bundleFile = (raw['bundleFile'] ?? '').toString().trim();
+      final id = (raw['id'] ?? '').toString().trim();
+      final displayName = (raw['displayName'] ?? '').toString().trim();
+      final manifest = (raw['manifest'] ?? '').toString().trim();
+      final countRaw = raw['count'];
 
-      if (addressKey.isEmpty) {
-        throw Exception('Manifest entry is missing addressKey.');
-      }
-      if (jsonFile.isEmpty) {
-        throw Exception('Manifest entry is missing jsonFile for $addressKey.');
-      }
-      if (bundleFile.isEmpty) {
-        throw Exception(
-          'Manifest entry is missing bundleFile for $addressKey.',
-        );
+      if (id.isEmpty) {
+        throw Exception('Category is missing id.');
       }
 
-      return _AddressablesManifestEntry(
-        addressKey: addressKey,
-        title: title.isEmpty ? addressKey : title,
-        animationName: animationName.isEmpty ? addressKey : animationName,
-        startPosition: startPosition,
-        endPosition: endPosition,
-        jsonFile: jsonFile,
-        bundleFile: bundleFile,
+      if (manifest.isEmpty) {
+        throw Exception('Category "$id" is missing manifest path.');
+      }
+
+      return _CategoryManifestRef(
+        id: id,
+        displayName: displayName.isEmpty ? id : displayName,
+        manifest: manifest,
+        count: countRaw is int ? countRaw : int.tryParse('$countRaw') ?? 0,
       );
     }).toList();
 
-    return _AddressablesManifest(
+    return _MainManifest(
+      version: version,
+      platform: platform,
       catalogFile: catalogFile,
       hashFile: hashFile,
-      entries: entries,
+      categories: categories,
+      entries: const [],
+    );
+  }
+
+  List<_AnimationManifestEntry> _parseCategoryManifest(String jsonString) {
+    final decoded = jsonDecode(jsonString);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Category manifest must be a JSON object.');
+    }
+
+    final category = (decoded['category'] ?? '').toString().trim();
+    final rawAnimations = decoded['animations'];
+
+    if (rawAnimations is! List) {
+      throw Exception('Category manifest is missing animations array.');
+    }
+
+    return rawAnimations.map<_AnimationManifestEntry>((raw) {
+      if (raw is! Map<String, dynamic>) {
+        throw Exception('Animation entry is not a JSON object.');
+      }
+
+      final id = (raw['id'] ?? '').toString().trim();
+      final animationName = (raw['animationName'] ?? '').toString().trim();
+      final displayName = (raw['displayName'] ?? '').toString().trim();
+      final description = (raw['description'] ?? '').toString().trim();
+      final entryCategory = (raw['category'] ?? category).toString().trim();
+      final startPosition = (raw['startPosition'] ?? '').toString().trim();
+      final endPosition = (raw['endPosition'] ?? '').toString().trim();
+      final stepsFile = (raw['stepsFile'] ?? '').toString().trim();
+      final bundle = (raw['bundle'] ?? '').toString().trim();
+      final preview = raw['preview']?.toString().trim();
+
+      final rawTags = raw['tags'];
+      final tags = rawTags is List
+          ? rawTags.map((tag) => tag.toString()).toList()
+          : <String>[];
+
+      if (id.isEmpty) {
+        throw Exception('Animation entry is missing id.');
+      }
+
+      if (animationName.isEmpty) {
+        throw Exception('Animation "$id" is missing animationName.');
+      }
+
+      if (stepsFile.isEmpty) {
+        throw Exception('Animation "$id" is missing stepsFile.');
+      }
+
+      if (bundle.isEmpty) {
+        throw Exception('Animation "$id" is missing bundle.');
+      }
+
+      return _AnimationManifestEntry(
+        id: id,
+        displayName: displayName.isEmpty ? id : displayName,
+        description: description,
+        category: entryCategory,
+        tags: tags,
+        startPosition: startPosition,
+        endPosition: endPosition,
+        stepsFile: stepsFile,
+        bundle: bundle,
+        preview: preview == null || preview.isEmpty ? null : preview,
+        animationName: animationName,
+      );
+    }).toList();
+  }
+
+  String _storageRefPath(String path) {
+    if (path.startsWith(_remoteFolder)) {
+      return path;
+    }
+
+    return '$_remoteFolder/$path';
+  }
+
+  File _localFileForRemotePath({
+    required Directory addressablesDir,
+    required String remotePath,
+  }) {
+    var localRelativePath = remotePath;
+
+    if (localRelativePath.startsWith('$_remoteFolder/')) {
+      localRelativePath = localRelativePath.replaceFirst('$_remoteFolder/', '');
+    }
+
+    return File('${addressablesDir.path}/$localRelativePath');
+  }
+}
+
+class _MainManifest {
+  const _MainManifest({
+    required this.version,
+    required this.platform,
+    required this.catalogFile,
+    required this.hashFile,
+    required this.categories,
+    required this.entries,
+  });
+
+  final String version;
+  final String platform;
+  final String catalogFile;
+  final String hashFile;
+  final List<_CategoryManifestRef> categories;
+  final List<_AnimationManifestEntry> entries;
+
+  _MainManifest copyWith({List<_AnimationManifestEntry>? entries}) {
+    return _MainManifest(
+      version: version,
+      platform: platform,
+      catalogFile: catalogFile,
+      hashFile: hashFile,
+      categories: categories,
+      entries: entries ?? this.entries,
     );
   }
 }
 
-class _AddressablesManifest {
-  _AddressablesManifest({
-    required this.catalogFile,
-    required this.hashFile,
-    required this.entries,
+class _CategoryManifestRef {
+  const _CategoryManifestRef({
+    required this.id,
+    required this.displayName,
+    required this.manifest,
+    required this.count,
   });
 
-  final String catalogFile;
-  final String hashFile;
-  final List<_AddressablesManifestEntry> entries;
+  final String id;
+  final String displayName;
+  final String manifest;
+  final int count;
 }
 
-class _AddressablesManifestEntry {
-  _AddressablesManifestEntry({
-    required this.addressKey,
-    required this.title,
-    required this.animationName,
+class _AnimationManifestEntry {
+  const _AnimationManifestEntry({
+    required this.id,
+    required this.displayName,
+    required this.description,
+    required this.category,
+    required this.tags,
     required this.startPosition,
     required this.endPosition,
-    required this.jsonFile,
-    required this.bundleFile,
+    required this.stepsFile,
+    required this.bundle,
+    required this.preview,
+    required this.animationName,
   });
 
-  final String addressKey;
-  final String title;
-  final String animationName;
+  final String id;
+  final String displayName;
+  final String description;
+  final String category;
+  final List<String> tags;
   final String startPosition;
   final String endPosition;
-  final String jsonFile;
-  final String bundleFile;
+  final String stepsFile;
+  final String bundle;
+  final String? preview;
+  final String animationName;
 }

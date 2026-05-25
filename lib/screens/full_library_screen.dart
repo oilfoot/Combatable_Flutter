@@ -52,7 +52,6 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           await widget.libraryController.performPrimaryAction(entry);
         } catch (e) {
           if (!mounted) return;
-
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
           );
@@ -66,7 +65,6 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
@@ -80,7 +78,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
 
     var items = _showRecommendedOnly
         ? library.recommendedNextItems
-        : library.allItems;
+        : library.categoryFilteredItems;
 
     items = items.where((entry) {
       if (_showInstalledOnly && !entry.isInstalled) return false;
@@ -96,12 +94,12 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
         surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
-        bottom: false,
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextField(
                     controller: _searchController,
@@ -128,6 +126,42 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
+
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: const Text('All'),
+                            selected: library.selectedCategoryId == null,
+                            onSelected: (_) {
+                              library.selectCategory(null);
+                            },
+                          ),
+                        ),
+                        ...library.categories.map((category) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(
+                                '${category.displayName} (${category.count})',
+                              ),
+                              selected:
+                                  library.selectedCategoryId == category.id,
+                              onSelected: (_) {
+                                library.selectCategory(category.id);
+                              },
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,

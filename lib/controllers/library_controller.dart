@@ -32,13 +32,24 @@ class LibraryController extends ChangeNotifier {
   final SequenceController _sequenceController;
   final RemoteAddressablesService _remoteAddressablesService;
 
+  String? _selectedCategoryId;
+
   SequenceController get sequenceController => _sequenceController;
   RemoteAddressablesService get remoteAddressablesService =>
       _remoteAddressablesService;
 
+  List<RemoteAnimationCategory> get categories =>
+      _remoteAddressablesService.categories;
+
+  String? get selectedCategoryId => _selectedCategoryId;
+
+  void selectCategory(String? categoryId) {
+    _selectedCategoryId = categoryId;
+    notifyListeners();
+  }
+
   List<LibraryDisplayItem> get allItems {
-    final Map<String, LibraryDisplayItem> byAnimationName =
-        <String, LibraryDisplayItem>{};
+    final Map<String, LibraryDisplayItem> byAnimationName = {};
 
     for (final item in mockAnimationLibrary) {
       byAnimationName[item.animationName] = LibraryDisplayItem(
@@ -50,17 +61,15 @@ class LibraryController extends ChangeNotifier {
     }
 
     for (final item in _remoteAddressablesService.availableItems) {
+      final key = item.downloadKey;
+
       byAnimationName.putIfAbsent(
         item.animationName,
         () => LibraryDisplayItem(
           item: item,
           isRemote: true,
-          isInstalled: _remoteAddressablesService.isAnimationDownloaded(
-            item.animationName,
-          ),
-          isDownloading: _remoteAddressablesService.isAnimationDownloading(
-            item.animationName,
-          ),
+          isInstalled: _remoteAddressablesService.isAnimationDownloaded(key),
+          isDownloading: _remoteAddressablesService.isAnimationDownloading(key),
         ),
       );
     }
@@ -74,8 +83,18 @@ class LibraryController extends ChangeNotifier {
     return items;
   }
 
+  List<LibraryDisplayItem> get categoryFilteredItems {
+    if (_selectedCategoryId == null || _selectedCategoryId!.isEmpty) {
+      return allItems;
+    }
+
+    return allItems.where((entry) {
+      return entry.item.category == _selectedCategoryId;
+    }).toList();
+  }
+
   List<LibraryDisplayItem> get recommendedNextItems {
-    return allItems
+    return categoryFilteredItems
         .where((entry) => _sequenceController.canAddAnimation(entry.item))
         .toList();
   }
@@ -99,7 +118,7 @@ class LibraryController extends ChangeNotifier {
 
     if (entry.isRemote && !entry.isInstalled) {
       await _remoteAddressablesService.downloadAnimation(
-        entry.item.animationName,
+        entry.item.downloadKey,
       );
     }
 
@@ -117,7 +136,9 @@ class LibraryController extends ChangeNotifier {
     return entry.item.title.toLowerCase().contains(q) ||
         entry.item.animationName.toLowerCase().contains(q) ||
         entry.item.startPosition.toLowerCase().contains(q) ||
-        entry.item.endPosition.toLowerCase().contains(q);
+        entry.item.endPosition.toLowerCase().contains(q) ||
+        (entry.item.category ?? '').toLowerCase().contains(q) ||
+        entry.item.tags.any((tag) => tag.toLowerCase().contains(q));
   }
 
   void _onDependenciesChanged() {
