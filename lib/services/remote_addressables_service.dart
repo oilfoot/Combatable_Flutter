@@ -162,7 +162,7 @@ class RemoteAddressablesService extends ChangeNotifier {
           .ref(_storageRefPath(entry.stepsFile))
           .writeToFile(localStepsFile);
 
-      final localBundleFile = _localFileForRemotePath(
+      final localBundleFile = _localBundleFileForCatalog(
         addressablesDir: addressablesDir,
         remotePath: entry.bundle,
       );
@@ -387,7 +387,7 @@ class RemoteAddressablesService extends ChangeNotifier {
         remotePath: entry.stepsFile,
       );
 
-      final localBundleFile = _localFileForRemotePath(
+      final localBundleFile = _localBundleFileForCatalog(
         addressablesDir: addressablesDir,
         remotePath: entry.bundle,
       );
@@ -594,6 +594,14 @@ class RemoteAddressablesService extends ChangeNotifier {
     }
 
     return File('${addressablesDir.path}/$localRelativePath');
+  }
+
+  File _localBundleFileForCatalog({
+    required Directory addressablesDir,
+    required String remotePath,
+  }) {
+    final filename = remotePath.split('/').last;
+    return File('${addressablesDir.path}/$filename');
   }
 }
 
