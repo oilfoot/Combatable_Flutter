@@ -52,6 +52,8 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   final Set<String> _downloadedKeys = {};
   final Set<String> _downloadingKeys = {};
+  final Set<String> _loadedCategoryIds = {};
+  final Set<String> _loadingCategoryIds = {};
 
   String get status => _status;
   String? get addressablesDirPath => _addressablesDirPath;
@@ -62,6 +64,8 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   List<RemoteAnimationCategory> get categories =>
       List.unmodifiable(_categories);
+  Set<String> get loadedCategoryIds => Set.unmodifiable(_loadedCategoryIds);
+  Set<String> get loadingCategoryIds => Set.unmodifiable(_loadingCategoryIds);
   List<AnimationLibraryItem> get availableItems =>
       List.unmodifiable(_availableItems);
   List<AnimationLibraryItem> get downloadedItems =>
@@ -100,7 +104,6 @@ class RemoteAddressablesService extends ChangeNotifier {
       _addressablesDirPath = addressablesDir.path;
 
       await _downloadMainManifestToLocal(addressablesDir: addressablesDir);
-      await _downloadCategoryManifestsToLocal(addressablesDir: addressablesDir);
       await _restoreStateFromDisk(addressablesDir: addressablesDir);
 
       _status =
@@ -117,6 +120,110 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   Future<void> refreshLibrary() async {
     await initializeLibrary();
+  }
+
+  Future<void> loadCategory(String categoryId) async {
+    final trimmedCategoryId = categoryId.trim();
+
+    if (trimmedCategoryId.isEmpty) return;
+    if (_loadedCategoryIds.contains(trimmedCategoryId)) return;
+    if (_loadingCategoryIds.contains(trimmedCategoryId)) return;
+
+    final manifest = _manifest;
+
+    if (manifest == null) {
+      throw Exception('Main manifest is not loaded.');
+    }
+
+    _CategoryManifestRef? categoryRef;
+
+    for (final category in manifest.categories) {
+      if (category.id == trimmedCategoryId) {
+        categoryRef = category;
+        break;
+      }
+    }
+
+    if (categoryRef == null) {
+      throw Exception('Category "$trimmedCategoryId" was not found.');
+    }
+
+    _loadingCategoryIds.add(trimmedCategoryId);
+    _status = 'Loading ${categoryRef.displayName}...';
+    notifyListeners();
+
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final addressablesDir = Directory('${appDir.path}/addressables');
+
+      if (!await addressablesDir.exists()) {
+        await addressablesDir.create(recursive: true);
+      }
+
+      _addressablesDirPath = addressablesDir.path;
+
+      final localCategoryFile = File(
+        '${addressablesDir.path}/${categoryRef.manifest}',
+      );
+
+      await localCategoryFile.parent.create(recursive: true);
+
+      await _firebaseStorage
+          .ref('$_remoteFolder/${categoryRef.manifest}')
+          .writeToFile(localCategoryFile);
+
+      final categoryContent = await localCategoryFile.readAsString();
+      final loadedEntries = _parseCategoryManifest(categoryContent);
+
+      final existingEntries = manifest.entries
+          .where((entry) => entry.category != trimmedCategoryId)
+          .toList();
+
+      existingEntries.addAll(loadedEntries);
+
+      _manifest = manifest.copyWith(entries: existingEntries);
+
+      _availableItems
+        ..clear()
+        ..addAll(existingEntries.map(_toLibraryItem));
+
+      for (final entry in loadedEntries) {
+        final localStepsFile = _localFileForRemotePath(
+          addressablesDir: addressablesDir,
+          remotePath: entry.stepsFile,
+        );
+
+        final localBundleFile = _localBundleFileForCatalog(
+          addressablesDir: addressablesDir,
+          remotePath: entry.bundle,
+        );
+
+        final hasSteps = await localStepsFile.exists();
+        final hasBundle = await localBundleFile.exists();
+
+        if (hasSteps && hasBundle) {
+          _downloadedKeys.add(entry.id);
+
+          if (!_downloadedJsonPaths.contains(localStepsFile.path)) {
+            _downloadedJsonPaths.add(localStepsFile.path);
+          }
+        }
+      }
+
+      _rebuildDownloadedItems();
+      _loadedCategoryIds.add(trimmedCategoryId);
+
+      _status =
+          '${categoryRef.displayName} ready.\n'
+          'Available: ${_availableItems.length}\n'
+          'Downloaded: ${_downloadedItems.length}';
+    } catch (e) {
+      _status = 'Failed to load category "$trimmedCategoryId":\n$e';
+      rethrow;
+    } finally {
+      _loadingCategoryIds.remove(trimmedCategoryId);
+      notifyListeners();
+    }
   }
 
   Future<void> downloadAnimation(String addressKey) async {
@@ -341,6 +448,8 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     final allEntries = <_AnimationManifestEntry>[];
 
+    _loadedCategoryIds.clear();
+
     for (final category in mainManifest.categories) {
       final categoryFile = File('${addressablesDir.path}/${category.manifest}');
 
@@ -352,6 +461,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       final entries = _parseCategoryManifest(categoryContent);
 
       allEntries.addAll(entries);
+      _loadedCategoryIds.add(category.id);
     }
 
     _manifest = mainManifest.copyWith(entries: allEntries);
@@ -380,6 +490,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     _downloadedKeys.clear();
     _downloadedJsonPaths.clear();
+    _loadingCategoryIds.clear();
 
     for (final entry in allEntries) {
       final localStepsFile = _localFileForRemotePath(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app_shell.dart';
@@ -35,9 +37,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
   }
 
   void _onLibraryChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
@@ -52,6 +52,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           await widget.libraryController.performPrimaryAction(entry);
         } catch (e) {
           if (!mounted) return;
+
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
           );
@@ -65,6 +66,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
@@ -111,22 +113,17 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                           : IconButton(
                               onPressed: () {
                                 _searchController.clear();
-                                setState(() {
-                                  _searchQuery = '';
-                                });
+                                setState(() => _searchQuery = '');
                               },
                               icon: const Icon(Icons.close),
                             ),
                       border: const OutlineInputBorder(),
                     ),
                     onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
+                      setState(() => _searchQuery = value);
                     },
                   ),
                   const SizedBox(height: 10),
-
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -137,7 +134,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                             label: const Text('All'),
                             selected: library.selectedCategoryId == null,
                             onSelected: (_) {
-                              library.selectCategory(null);
+                              unawaited(library.selectCategory(null));
                             },
                           ),
                         ),
@@ -151,7 +148,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                               selected:
                                   library.selectedCategoryId == category.id,
                               onSelected: (_) {
-                                library.selectCategory(category.id);
+                                unawaited(library.selectCategory(category.id));
                               },
                             ),
                           );
@@ -159,9 +156,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -170,18 +165,14 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                         label: const Text('Installed'),
                         selected: _showInstalledOnly,
                         onSelected: (value) {
-                          setState(() {
-                            _showInstalledOnly = value;
-                          });
+                          setState(() => _showInstalledOnly = value);
                         },
                       ),
                       FilterChip(
                         label: const Text('Recommended Next'),
                         selected: _showRecommendedOnly,
                         onSelected: (value) {
-                          setState(() {
-                            _showRecommendedOnly = value;
-                          });
+                          setState(() => _showRecommendedOnly = value);
                         },
                       ),
                     ],

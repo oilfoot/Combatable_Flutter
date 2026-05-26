@@ -34,18 +34,18 @@ class LibraryController extends ChangeNotifier {
 
   String? _selectedCategoryId;
 
-  SequenceController get sequenceController => _sequenceController;
-  RemoteAddressablesService get remoteAddressablesService =>
-      _remoteAddressablesService;
-
   List<RemoteAnimationCategory> get categories =>
       _remoteAddressablesService.categories;
 
   String? get selectedCategoryId => _selectedCategoryId;
 
-  void selectCategory(String? categoryId) {
+  Future<void> selectCategory(String? categoryId) async {
     _selectedCategoryId = categoryId;
     notifyListeners();
+
+    if (categoryId == null || categoryId.isEmpty) return;
+
+    await _remoteAddressablesService.loadCategory(categoryId);
   }
 
   List<LibraryDisplayItem> get allItems {
@@ -61,26 +61,20 @@ class LibraryController extends ChangeNotifier {
     }
 
     for (final item in _remoteAddressablesService.availableItems) {
-      final key = item.downloadKey;
-
-      byAnimationName.putIfAbsent(
-        item.animationName,
-        () => LibraryDisplayItem(
-          item: item,
-          isRemote: true,
-          isInstalled: _remoteAddressablesService.isAnimationDownloaded(key),
-          isDownloading: _remoteAddressablesService.isAnimationDownloading(key),
+      byAnimationName[item.animationName] = LibraryDisplayItem(
+        item: item,
+        isRemote: true,
+        isInstalled: _remoteAddressablesService.isAnimationDownloaded(
+          item.downloadKey,
+        ),
+        isDownloading: _remoteAddressablesService.isAnimationDownloading(
+          item.downloadKey,
         ),
       );
     }
 
-    final items = byAnimationName.values.toList()
-      ..sort(
-        (a, b) =>
-            a.item.title.toLowerCase().compareTo(b.item.title.toLowerCase()),
-      );
-
-    return items;
+    return byAnimationName.values.toList()
+      ..sort((a, b) => a.item.title.compareTo(b.item.title));
   }
 
   List<LibraryDisplayItem> get categoryFilteredItems {
@@ -88,9 +82,9 @@ class LibraryController extends ChangeNotifier {
       return allItems;
     }
 
-    return allItems.where((entry) {
-      return entry.item.category == _selectedCategoryId;
-    }).toList();
+    return allItems
+        .where((entry) => entry.item.category == _selectedCategoryId)
+        .toList();
   }
 
   List<LibraryDisplayItem> get recommendedNextItems {
@@ -99,11 +93,19 @@ class LibraryController extends ChangeNotifier {
         .toList();
   }
 
-  String? get requiredNextStartPosition =>
-      _sequenceController.requiredNextStartPosition;
+  bool matchesSearch(LibraryDisplayItem entry, String query) {
+    final normalizedQuery = query.trim().toLowerCase();
 
-  bool canAdd(AnimationLibraryItem item) {
-    return _sequenceController.canAddAnimation(item);
+    if (normalizedQuery.isEmpty) return true;
+
+    return entry.item.title.toLowerCase().contains(normalizedQuery) ||
+        entry.item.animationName.toLowerCase().contains(normalizedQuery) ||
+        entry.item.startPosition.toLowerCase().contains(normalizedQuery) ||
+        entry.item.endPosition.toLowerCase().contains(normalizedQuery) ||
+        (entry.item.category ?? '').toLowerCase().contains(normalizedQuery) ||
+        entry.item.tags.any(
+          (tag) => tag.toLowerCase().contains(normalizedQuery),
+        );
   }
 
   String getPrimaryActionLabel(LibraryDisplayItem entry) {
@@ -123,22 +125,6 @@ class LibraryController extends ChangeNotifier {
     }
 
     _sequenceController.addAnimationItem(entry.item);
-  }
-
-  Future<void> refreshLibrary() async {
-    await _remoteAddressablesService.refreshLibrary();
-  }
-
-  bool matchesSearch(LibraryDisplayItem entry, String query) {
-    final q = query.trim().toLowerCase();
-    if (q.isEmpty) return true;
-
-    return entry.item.title.toLowerCase().contains(q) ||
-        entry.item.animationName.toLowerCase().contains(q) ||
-        entry.item.startPosition.toLowerCase().contains(q) ||
-        entry.item.endPosition.toLowerCase().contains(q) ||
-        (entry.item.category ?? '').toLowerCase().contains(q) ||
-        entry.item.tags.any((tag) => tag.toLowerCase().contains(q));
   }
 
   void _onDependenciesChanged() {
