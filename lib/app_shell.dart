@@ -53,7 +53,13 @@ class _AppShellState extends State<AppShell> {
       remoteAddressablesService: _remoteAddressablesService,
     );
 
-    _remoteAddressablesService.initializeLibrary();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _remoteAddressablesService.initializeLibrary();
+
+      if (!mounted) return;
+
+      _libraryController.notifyListeners();
+    });
 
     _pages = [
       const HomeScreen(),

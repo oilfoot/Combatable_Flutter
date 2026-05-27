@@ -13,12 +13,14 @@ class RemoteAnimationCategory {
     required this.id,
     required this.displayName,
     required this.manifest,
+    required this.version,
     required this.count,
   });
 
   final String id;
   final String displayName;
   final String manifest;
+  final String version;
   final int count;
 }
 
@@ -458,6 +460,16 @@ class RemoteAddressablesService extends ChangeNotifier {
       }
 
       final categoryContent = await categoryFile.readAsString();
+      final localCategoryVersion = _parseCategoryManifestVersion(
+        categoryContent,
+      );
+
+      if (category.version.isNotEmpty &&
+          localCategoryVersion != category.version) {
+        await categoryFile.delete();
+        continue;
+      }
+
       final entries = _parseCategoryManifest(categoryContent);
 
       allEntries.addAll(entries);
@@ -474,6 +486,7 @@ class RemoteAddressablesService extends ChangeNotifier {
             id: category.id,
             displayName: category.displayName,
             manifest: category.manifest,
+            version: category.version,
             count: category.count,
           ),
         ),
@@ -591,6 +604,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       final id = (raw['id'] ?? '').toString().trim();
       final displayName = (raw['displayName'] ?? '').toString().trim();
       final manifest = (raw['manifest'] ?? '').toString().trim();
+      final version = (raw['version'] ?? '').toString().trim();
       final countRaw = raw['count'];
 
       if (id.isEmpty) {
@@ -605,6 +619,7 @@ class RemoteAddressablesService extends ChangeNotifier {
         id: id,
         displayName: displayName.isEmpty ? id : displayName,
         manifest: manifest,
+        version: version,
         count: countRaw is int ? countRaw : int.tryParse('$countRaw') ?? 0,
       );
     }).toList();
@@ -617,6 +632,16 @@ class RemoteAddressablesService extends ChangeNotifier {
       categories: categories,
       entries: const [],
     );
+  }
+
+  String _parseCategoryManifestVersion(String jsonString) {
+    final decoded = jsonDecode(jsonString);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Category manifest must be a JSON object.');
+    }
+
+    return (decoded['version'] ?? '').toString().trim();
   }
 
   List<_AnimationManifestEntry> _parseCategoryManifest(String jsonString) {
@@ -750,12 +775,14 @@ class _CategoryManifestRef {
     required this.id,
     required this.displayName,
     required this.manifest,
+    required this.version,
     required this.count,
   });
 
   final String id;
   final String displayName;
   final String manifest;
+  final String version;
   final int count;
 }
 
