@@ -56,6 +56,7 @@ class RemoteAddressablesService extends ChangeNotifier {
   final Set<String> _downloadingKeys = {};
   final Set<String> _loadedCategoryIds = {};
   final Set<String> _loadingCategoryIds = {};
+  final Map<String, Future<String?>> _previewDownloadFutures = {};
 
   String get status => _status;
   String? get addressablesDirPath => _addressablesDirPath;
@@ -86,6 +87,52 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   bool isAnimationDownloading(String addressKey) {
     return _downloadingKeys.contains(addressKey.trim());
+  }
+
+  Future<String?> getOrDownloadPreview(String? previewPath) async {
+    final trimmedPreviewPath = previewPath?.trim();
+
+    if (trimmedPreviewPath == null || trimmedPreviewPath.isEmpty) {
+      return null;
+    }
+
+    if (trimmedPreviewPath.startsWith('/')) {
+      final file = File(trimmedPreviewPath);
+      return await file.exists() ? file.path : null;
+    }
+
+    if (trimmedPreviewPath.startsWith('http://') ||
+        trimmedPreviewPath.startsWith('https://')) {
+      return trimmedPreviewPath;
+    }
+
+    final lower = trimmedPreviewPath.toLowerCase();
+    final isSupportedPreview =
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.mp4');
+
+    if (!isSupportedPreview) {
+      return null;
+    }
+
+    final existingFuture = _previewDownloadFutures[trimmedPreviewPath];
+
+    if (existingFuture != null) {
+      return existingFuture;
+    }
+
+    final future = _downloadPreviewToCache(trimmedPreviewPath);
+    _previewDownloadFutures[trimmedPreviewPath] = future;
+
+    try {
+      return await future;
+    } finally {
+      _previewDownloadFutures.remove(trimmedPreviewPath);
+    }
   }
 
   Future<void> initializeLibrary() async {
@@ -717,6 +764,38 @@ class RemoteAddressablesService extends ChangeNotifier {
     }
 
     return '$_remoteFolder/$path';
+  }
+
+  Future<String?> _downloadPreviewToCache(String remotePreviewPath) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final addressablesDir = Directory('${appDir.path}/addressables');
+    final previewsDir = Directory('${addressablesDir.path}/previews');
+
+    if (!await previewsDir.exists()) {
+      await previewsDir.create(recursive: true);
+    }
+
+    final filename = remotePreviewPath.split('/').last;
+
+    if (filename.trim().isEmpty) {
+      return null;
+    }
+
+    final localPreviewFile = File('${previewsDir.path}/$filename');
+
+    if (await localPreviewFile.exists()) {
+      return localPreviewFile.path;
+    }
+
+    await _firebaseStorage
+        .ref(_storageRefPath(remotePreviewPath))
+        .writeToFile(localPreviewFile);
+
+    if (await localPreviewFile.exists()) {
+      return localPreviewFile.path;
+    }
+
+    return null;
   }
 
   File _localFileForRemotePath({

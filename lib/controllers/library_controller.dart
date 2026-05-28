@@ -48,6 +48,10 @@ class LibraryController extends ChangeNotifier {
     await _remoteAddressablesService.loadCategory(categoryId);
   }
 
+  Future<String?> getOrDownloadPreview(String? previewPath) {
+    return _remoteAddressablesService.getOrDownloadPreview(previewPath);
+  }
+
   List<LibraryDisplayItem> get allItems {
     final Map<String, LibraryDisplayItem> byAnimationName = {};
 

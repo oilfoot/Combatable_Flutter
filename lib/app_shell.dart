@@ -55,10 +55,6 @@ class _AppShellState extends State<AppShell> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _remoteAddressablesService.initializeLibrary();
-
-      if (!mounted) return;
-
-      _libraryController.notifyListeners();
     });
 
     _pages = [

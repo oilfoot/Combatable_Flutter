@@ -197,7 +197,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                             crossAxisCount: 2,
                             mainAxisSpacing: 12,
                             crossAxisSpacing: 12,
-                            childAspectRatio: 0.78,
+                            childAspectRatio: 0.62,
                           ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
@@ -210,6 +210,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                           isDownloading: entry.isDownloading,
                           showStatus: entry.isRemote,
                           buttonText: library.getPrimaryActionLabel(entry),
+                          resolvePreviewPath: library.getOrDownloadPreview,
                           onTap: () => _showAnimationInfo(entry),
                           onPrimaryAction: () => _handlePrimaryAction(entry),
                         );
