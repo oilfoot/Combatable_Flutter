@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
-import '../widgets/animation_info_sheet.dart';
-import '../widgets/animation_library_card.dart';
+import '../widgets/animation/animation_info_sheet.dart';
+import '../widgets/animation/animation_library_card.dart';
 
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
@@ -114,6 +114,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           isDownloading: entry.isDownloading,
           showStatus: entry.isRemote,
           buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+          resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
           onTap: () => _showAnimationInfo(entry),
           onPrimaryAction: () => _handlePrimaryAction(entry),
         );

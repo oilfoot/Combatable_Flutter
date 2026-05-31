@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
@@ -53,9 +54,7 @@ class _AppShellState extends State<AppShell> {
       remoteAddressablesService: _remoteAddressablesService,
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _remoteAddressablesService.initializeLibrary();
-    });
+    unawaited(_remoteAddressablesService.initializeLibrary());
 
     _pages = [
       const HomeScreen(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/animation_library_item.dart';
+import '../../models/animation_library_item.dart';
+import 'animation_preview_frame.dart';
 
 class AnimationInfoSheet extends StatelessWidget {
   const AnimationInfoSheet({
@@ -10,6 +11,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required this.isDownloading,
     required this.buttonText,
     required this.onPrimaryAction,
+    this.resolvePreviewPath,
   });
 
   final AnimationLibraryItem item;
@@ -17,6 +19,7 @@ class AnimationInfoSheet extends StatelessWidget {
   final bool isDownloading;
   final String buttonText;
   final Future<void> Function() onPrimaryAction;
+  final Future<String?> Function(String? previewPath)? resolvePreviewPath;
 
   static Future<void> show(
     BuildContext context, {
@@ -25,6 +28,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required bool isDownloading,
     required String buttonText,
     required Future<void> Function() onPrimaryAction,
+    Future<String?> Function(String? previewPath)? resolvePreviewPath,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -38,6 +42,7 @@ class AnimationInfoSheet extends StatelessWidget {
           isDownloading: isDownloading,
           buttonText: buttonText,
           onPrimaryAction: onPrimaryAction,
+          resolvePreviewPath: resolvePreviewPath,
         );
       },
     );
@@ -84,7 +89,10 @@ class AnimationInfoSheet extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _PreviewBox(title: item.title),
+                      AnimationPreviewFrame(
+                        previewPath: item.previewPath,
+                        resolvePreviewPath: resolvePreviewPath,
+                      ),
                       const SizedBox(height: 20),
 
                       Row(
@@ -173,43 +181,6 @@ class AnimationInfoSheet extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _PreviewBox extends StatelessWidget {
-  const _PreviewBox({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 1.35,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF202225), Color(0xFF111214)],
-          ),
-          border: Border.all(color: Colors.white12),
-        ),
-        alignment: Alignment.center,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

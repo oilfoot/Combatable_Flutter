@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
-import '../widgets/animation_info_sheet.dart';
-import '../widgets/animation_library_card.dart';
+import 'library_search_screen.dart';
+import '../widgets/animation/animation_info_sheet.dart';
+import '../widgets/animation/animation_library_card.dart';
 
 class FullLibraryScreen extends StatefulWidget {
   const FullLibraryScreen({super.key, required this.libraryController});
@@ -17,12 +18,6 @@ class FullLibraryScreen extends StatefulWidget {
 }
 
 class _FullLibraryScreenState extends State<FullLibraryScreen> {
-  final TextEditingController _searchController = TextEditingController();
-
-  String _searchQuery = '';
-  bool _showInstalledOnly = false;
-  bool _showRecommendedOnly = false;
-
   @override
   void initState() {
     super.initState();
@@ -32,7 +27,6 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
   @override
   void dispose() {
     widget.libraryController.removeListener(_onLibraryChanged);
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -47,12 +41,12 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       isDownloaded: entry.isInstalled,
       isDownloading: entry.isDownloading,
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+      resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       onPrimaryAction: () async {
         try {
           await widget.libraryController.performPrimaryAction(entry);
         } catch (e) {
           if (!mounted) return;
-
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
           );
@@ -66,7 +60,6 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       await widget.libraryController.performPrimaryAction(entry);
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
@@ -77,147 +70,166 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
   Widget build(BuildContext context) {
     final library = widget.libraryController;
     final theme = Theme.of(context);
-
-    var items = _showRecommendedOnly
-        ? library.recommendedNextItems
-        : library.categoryFilteredItems;
-
-    items = items.where((entry) {
-      if (_showInstalledOnly && !entry.isInstalled) return false;
-      return library.matchesSearch(entry, _searchQuery);
-    }).toList();
+    final items = library.categoryFilteredItems;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Full Library'),
-        scrolledUnderElevation: 0,
-        elevation: 0,
-        backgroundColor: theme.scaffoldBackgroundColor,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      body: Stack(
+        children: [
+          GridView.builder(
+            padding: const EdgeInsets.fromLTRB(
+              12,
+              200,
+              12,
+              AppShell.floatingNavExtraScrollSpace,
+            ),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 14,
+              crossAxisSpacing: 14,
+              childAspectRatio: 0.62,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final entry = items[index];
+
+              return AnimationLibraryCard(
+                width: double.infinity,
+                item: entry.item,
+                isDownloaded: entry.isInstalled,
+                isDownloading: entry.isDownloading,
+                showStatus: entry.isRemote,
+                buttonText: library.getPrimaryActionLabel(entry),
+                resolvePreviewPath: library.getOrDownloadPreview,
+                onTap: () => _showAnimationInfo(entry),
+                onPrimaryAction: () => _handlePrimaryAction(entry),
+              );
+            },
+          ),
+
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 18,
+                left: 16,
+                right: 16,
+                bottom: 18,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    theme.scaffoldBackgroundColor,
+                    theme.scaffoldBackgroundColor.withOpacity(0.92),
+                    theme.scaffoldBackgroundColor.withOpacity(0),
+                  ],
+                ),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search animations...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _searchQuery.isEmpty
-                          ? null
-                          : IconButton(
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                              icon: const Icon(Icons.close),
-                            ),
-                      border: const OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      setState(() => _searchQuery = value);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: const Text('All'),
-                            selected: library.selectedCategoryId == null,
-                            onSelected: (_) {
-                              unawaited(library.selectCategory(null));
-                            },
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Bibliothek',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        ...library.categories.map((category) {
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(
-                                '${category.displayName} (${category.count})',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => LibrarySearchScreen(
+                                libraryController: library,
                               ),
-                              selected:
-                                  library.selectedCategoryId == category.id,
-                              onSelected: (_) {
-                                unawaited(library.selectCategory(category.id));
-                              },
                             ),
                           );
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      FilterChip(
-                        label: const Text('Installed'),
-                        selected: _showInstalledOnly,
-                        onSelected: (value) {
-                          setState(() => _showInstalledOnly = value);
-                        },
-                      ),
-                      FilterChip(
-                        label: const Text('Recommended Next'),
-                        selected: _showRecommendedOnly,
-                        onSelected: (value) {
-                          setState(() => _showRecommendedOnly = value);
                         },
                       ),
                     ],
                   ),
+                  const SizedBox(height: 22),
+                  SizedBox(
+                    height: 52,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _CategoryPill(
+                          label: 'Alle',
+                          selected: library.selectedCategoryId == null,
+                          onTap: () {
+                            unawaited(library.selectCategory(null));
+                          },
+                        ),
+                        ...library.categories.map(
+                          (category) => _CategoryPill(
+                            label: category.displayName,
+                            selected: library.selectedCategoryId == category.id,
+                            onTap: () {
+                              unawaited(library.selectCategory(category.id));
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            Expanded(
-              child: items.isEmpty
-                  ? const Center(
-                      child: Text('No animations match your filters'),
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(
-                        12,
-                        12,
-                        12,
-                        AppShell.floatingNavExtraScrollSpace,
-                      ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: 12,
-                            crossAxisSpacing: 12,
-                            childAspectRatio: 0.62,
-                          ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final entry = items[index];
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-                        return AnimationLibraryCard(
-                          width: double.infinity,
-                          item: entry.item,
-                          isDownloaded: entry.isInstalled,
-                          isDownloading: entry.isDownloading,
-                          showStatus: entry.isRemote,
-                          buttonText: library.getPrimaryActionLabel(entry),
-                          resolvePreviewPath: library.getOrDownloadPreview,
-                          onTap: () => _showAnimationInfo(entry),
-                          onPrimaryAction: () => _handlePrimaryAction(entry),
-                        );
-                      },
-                    ),
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 10),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? Colors.white.withOpacity(0.88)
+                : Colors.black.withOpacity(0.34),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withOpacity(0.7)
+                  : Colors.white.withOpacity(0.14),
             ),
-          ],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.black : Colors.white,
+            ),
+          ),
         ),
       ),
     );

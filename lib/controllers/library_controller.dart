@@ -48,6 +48,12 @@ class LibraryController extends ChangeNotifier {
     await _remoteAddressablesService.loadCategory(categoryId);
   }
 
+  Future<void> loadAllCategories() async {
+    for (final category in categories) {
+      await _remoteAddressablesService.loadCategory(category.id);
+    }
+  }
+
   Future<String?> getOrDownloadPreview(String? previewPath) {
     return _remoteAddressablesService.getOrDownloadPreview(previewPath);
   }

@@ -139,7 +139,7 @@ class RemoteAddressablesService extends ChangeNotifier {
     if (_isInitializing) return;
 
     _isInitializing = true;
-    _status = 'Loading remote animation library...';
+    _status = 'Loading animation library...';
     notifyListeners();
 
     try {
@@ -152,6 +152,18 @@ class RemoteAddressablesService extends ChangeNotifier {
 
       _addressablesDirPath = addressablesDir.path;
 
+      final restoredFromCache = await _tryRestoreStateFromDisk(
+        addressablesDir: addressablesDir,
+      );
+
+      if (restoredFromCache) {
+        _status =
+            'Animation library ready from cache.\n'
+            'Available: ${_availableItems.length}\n'
+            'Downloaded: ${_downloadedItems.length}';
+        notifyListeners();
+      }
+
       await _downloadMainManifestToLocal(addressablesDir: addressablesDir);
       await _restoreStateFromDisk(addressablesDir: addressablesDir);
 
@@ -160,7 +172,16 @@ class RemoteAddressablesService extends ChangeNotifier {
           'Available: ${_availableItems.length}\n'
           'Downloaded: ${_downloadedItems.length}';
     } catch (e) {
-      _status = 'Failed to load remote library:\n$e';
+      if (_manifest != null ||
+          _availableItems.isNotEmpty ||
+          _categories.isNotEmpty) {
+        _status =
+            'Using cached library. Remote refresh failed:\n$e\n'
+            'Available: ${_availableItems.length}\n'
+            'Downloaded: ${_downloadedItems.length}';
+      } else {
+        _status = 'Failed to load remote library:\n$e';
+      }
     } finally {
       _isInitializing = false;
       notifyListeners();
@@ -406,6 +427,24 @@ class RemoteAddressablesService extends ChangeNotifier {
     _isUnityPrepared = false;
   }
 
+  Future<bool> _tryRestoreStateFromDisk({
+    required Directory addressablesDir,
+  }) async {
+    final manifestFile = File('${addressablesDir.path}/$_mainManifestFileName');
+
+    if (!await manifestFile.exists()) {
+      return false;
+    }
+
+    try {
+      await _restoreStateFromDisk(addressablesDir: addressablesDir);
+      return true;
+    } catch (e) {
+      debugPrint('[RemoteAddressablesService] Failed to restore cache: $e');
+      return false;
+    }
+  }
+
   Future<void> _downloadMainManifestToLocal({
     required Directory addressablesDir,
   }) async {
@@ -425,26 +464,6 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     final manifestContent = await manifestLocalFile.readAsString();
     _manifest = _parseMainManifest(manifestContent);
-  }
-
-  Future<void> _downloadCategoryManifestsToLocal({
-    required Directory addressablesDir,
-  }) async {
-    final manifest = _manifest;
-
-    if (manifest == null) {
-      throw Exception('Main manifest is not loaded.');
-    }
-
-    for (final category in manifest.categories) {
-      final localFile = File('${addressablesDir.path}/${category.manifest}');
-
-      await localFile.parent.create(recursive: true);
-
-      await _firebaseStorage
-          .ref('$_remoteFolder/${category.manifest}')
-          .writeToFile(localFile);
-    }
   }
 
   Future<void> _ensureCoreFilesDownloaded({
