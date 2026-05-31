@@ -110,6 +110,14 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _openUnityPreview() async {
+    if (mounted && _currentIndex != 2) {
+      setState(() {
+        _currentIndex = 2;
+      });
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+
     await buildAndOpenUnity();
   }
 
@@ -123,13 +131,6 @@ class _AppShellState extends State<AppShell> {
 
     if (index == 2) {
       await _openUnityPreview();
-
-      if (!mounted) return;
-
-      setState(() {
-        _currentIndex = 2;
-      });
-
       return;
     }
 

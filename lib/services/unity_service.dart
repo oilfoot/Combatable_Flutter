@@ -308,10 +308,14 @@ class UnityService {
   }) async {
     await resumeUnity();
 
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
     await sendSequenceWhenReady(
       sequenceName: sequenceName,
       animations: animations,
     );
+
+    await Future<void>.delayed(const Duration(milliseconds: 350));
 
     await loadCurrentSequenceClips();
   }

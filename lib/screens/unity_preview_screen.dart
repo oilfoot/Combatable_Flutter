@@ -50,8 +50,6 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
         _unityTestWord = word;
       });
     });
-
-    Future.microtask(_preparePreview);
   }
 
   Future<void> _preparePreview() async {
@@ -119,14 +117,13 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
             onReady: (bridge) async {
               widget.unityService.markUnityReady();
 
-              await Future.delayed(const Duration(milliseconds: 500));
-              await widget.unityService.requestTestWord();
-
-              await widget.unityService.sendSequenceWhenReady(
+              await widget.unityService.preparePreview(
                 sequenceName: widget.sequenceController.sequenceName,
                 animations: widget.sequenceController
                     .getAnimationNamesForUnity(),
               );
+
+              await widget.unityService.requestTestWord();
 
               if (mounted) {
                 setState(() {});
