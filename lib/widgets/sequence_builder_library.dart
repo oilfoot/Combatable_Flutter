@@ -25,21 +25,14 @@ class SequenceBuilderLibrary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenHeight = MediaQuery.sizeOf(context).height;
-    final height = isExpanded
-        ? screenHeight * 0.76
-        : 128.0 + AppShell.floatingNavExtraScrollSpace;
+    final height = isExpanded ? screenHeight * 0.68 : 170.0;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOutCubic,
       height: height,
       width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        16,
-        6,
-        16,
-        10 + AppShell.floatingNavExtraScrollSpace,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
       decoration: BoxDecoration(
         color: const Color(0xF2141418),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -55,39 +48,44 @@ class SequenceBuilderLibrary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: GestureDetector(
-              onTap: onToggleExpanded,
-              onVerticalDragUpdate: (details) {
-                final delta = details.primaryDelta;
-                if (delta == null) return;
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: isExpanded ? null : onToggleExpanded,
+            onVerticalDragUpdate: (details) {
+              final delta = details.primaryDelta;
+              if (delta == null) return;
 
-                if (!isExpanded && delta < -6) onToggleExpanded();
-                if (isExpanded && delta > 6) onToggleExpanded();
-              },
-              child: Container(
-                width: 48,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.28),
-                  borderRadius: BorderRadius.circular(999),
+              if (!isExpanded && delta < -6) onToggleExpanded();
+              if (isExpanded && delta > 6) onToggleExpanded();
+            },
+            child: Column(
+              children: [
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.28),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text(
+                      'Library',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(isExpanded ? Icons.close : Icons.keyboard_arrow_up),
+                  ],
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Text(
-                'Library',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: onToggleExpanded,
-                icon: Icon(isExpanded ? Icons.close : Icons.keyboard_arrow_up),
-              ),
-            ],
           ),
           const SizedBox(height: 4),
           Expanded(
@@ -100,7 +98,9 @@ class SequenceBuilderLibrary extends StatelessWidget {
                   )
                 : isExpanded
                 ? GridView.builder(
-                    padding: EdgeInsets.zero,
+                    padding: EdgeInsets.only(
+                      bottom: AppShell.floatingNavExtraScrollSpace + 92,
+                    ),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 3,
@@ -115,26 +115,26 @@ class SequenceBuilderLibrary extends StatelessWidget {
                       return _SequenceLibraryMiniCard(
                         entry: entry,
                         libraryController: libraryController,
-                        onTap: () => onItemTap(entry),
-                        onPrimaryAction: () => onPrimaryAction(entry),
+                        onTap: () => onPrimaryAction(entry),
+                        onInfoTap: () => onItemTap(entry),
                       );
                     },
                   )
                 : ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(right: 12),
                     itemCount: items.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
                       final entry = items[index];
 
                       return SizedBox(
-                        width: 104,
+                        width: 112,
                         child: _SequenceLibraryMiniCard(
                           entry: entry,
                           libraryController: libraryController,
-                          onTap: () => onItemTap(entry),
-                          onPrimaryAction: () => onPrimaryAction(entry),
+                          onTap: () => onPrimaryAction(entry),
+                          onInfoTap: () => onItemTap(entry),
                         ),
                       );
                     },
@@ -151,13 +151,13 @@ class _SequenceLibraryMiniCard extends StatelessWidget {
     required this.entry,
     required this.libraryController,
     required this.onTap,
-    required this.onPrimaryAction,
+    required this.onInfoTap,
   });
 
   final LibraryDisplayItem entry;
   final LibraryController libraryController;
-  final VoidCallback onTap;
-  final Future<void> Function() onPrimaryAction;
+  final Future<void> Function() onTap;
+  final VoidCallback onInfoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -168,7 +168,11 @@ class _SequenceLibraryMiniCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
+        onTap: entry.isDownloading
+            ? null
+            : () async {
+                await onTap();
+              },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
           child: Stack(
@@ -200,6 +204,27 @@ class _SequenceLibraryMiniCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: Colors.white.withOpacity(0.10)),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 6,
+                left: 6,
+                child: GestureDetector(
+                  onTap: onInfoTap,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.34),
+                      border: Border.all(color: Colors.white.withOpacity(0.16)),
+                    ),
+                    child: const Icon(
+                      Icons.info_outline,
+                      size: 15,
+                      color: Colors.white,
                     ),
                   ),
                 ),
