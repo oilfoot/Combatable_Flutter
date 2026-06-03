@@ -12,6 +12,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required this.buttonText,
     required this.onPrimaryAction,
     this.resolvePreviewPath,
+    this.resolveCachedPreviewPath,
   });
 
   final AnimationLibraryItem item;
@@ -20,6 +21,7 @@ class AnimationInfoSheet extends StatelessWidget {
   final String buttonText;
   final Future<void> Function() onPrimaryAction;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
+  final String? Function(String? previewPath)? resolveCachedPreviewPath;
 
   static Future<void> show(
     BuildContext context, {
@@ -29,6 +31,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required String buttonText,
     required Future<void> Function() onPrimaryAction,
     Future<String?> Function(String? previewPath)? resolvePreviewPath,
+    String? Function(String? previewPath)? resolveCachedPreviewPath,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -43,6 +46,7 @@ class AnimationInfoSheet extends StatelessWidget {
           buttonText: buttonText,
           onPrimaryAction: onPrimaryAction,
           resolvePreviewPath: resolvePreviewPath,
+          resolveCachedPreviewPath: resolveCachedPreviewPath,
         );
       },
     );
@@ -92,9 +96,9 @@ class AnimationInfoSheet extends StatelessWidget {
                       AnimationPreviewFrame(
                         previewPath: item.previewPath,
                         resolvePreviewPath: resolvePreviewPath,
+                        resolveCachedPreviewPath: resolveCachedPreviewPath,
                       ),
                       const SizedBox(height: 20),
-
                       Row(
                         children: [
                           Expanded(
@@ -108,7 +112,6 @@ class AnimationInfoSheet extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 10),
-
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -126,9 +129,7 @@ class AnimationInfoSheet extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 20),
-
                       Text(
                         'Animation Details',
                         style: theme.textTheme.titleMedium?.copyWith(
@@ -143,9 +144,7 @@ class AnimationInfoSheet extends StatelessWidget {
                           height: 1.45,
                         ),
                       ),
-
                       const SizedBox(height: 28),
-
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -163,9 +162,7 @@ class AnimationInfoSheet extends StatelessWidget {
                           child: Text(buttonText),
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(

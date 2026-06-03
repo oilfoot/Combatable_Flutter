@@ -8,10 +8,12 @@ class AnimationPreviewFrame extends StatefulWidget {
     super.key,
     required this.previewPath,
     required this.resolvePreviewPath,
+    this.resolveCachedPreviewPath,
   });
 
   final String? previewPath;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
+  final String? Function(String? previewPath)? resolveCachedPreviewPath;
 
   @override
   State<AnimationPreviewFrame> createState() => _AnimationPreviewFrameState();
@@ -34,7 +36,8 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.previewPath != widget.previewPath ||
-        oldWidget.resolvePreviewPath != widget.resolvePreviewPath) {
+        oldWidget.resolvePreviewPath != widget.resolvePreviewPath ||
+        oldWidget.resolveCachedPreviewPath != widget.resolveCachedPreviewPath) {
       _resolvedPreviewPath = widget.previewPath;
       _loadPreviewIfNeeded();
     }
@@ -47,6 +50,18 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
     final previewPath = widget.previewPath;
 
     if (resolver == null || previewPath == null || previewPath.trim().isEmpty) {
+      return;
+    }
+
+    final cachedPreviewPath = widget.resolveCachedPreviewPath?.call(
+      previewPath,
+    );
+
+    if (cachedPreviewPath != null && cachedPreviewPath.trim().isNotEmpty) {
+      setState(() {
+        _resolvedPreviewPath = cachedPreviewPath;
+        _isLoading = false;
+      });
       return;
     }
 
@@ -127,8 +142,9 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
   }
 
   Widget _buildContent(BuildContext context) {
-    if (_isLoading && !_hasPreviewPath)
+    if (_isLoading && !_hasPreviewPath) {
       return _buildLoadingPlaceholder(context);
+    }
     if (!_hasPreviewPath) return _buildPlaceholder(context);
     if (_isVideoPreview) return _buildVideoPlaceholder(context);
     if (!_isImageLikePreview) return _buildPlaceholder(context);
@@ -136,7 +152,9 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
     if (_isLocalFile) {
       final file = File(_resolvedPreviewPath!);
 
-      if (!file.existsSync()) return _buildPlaceholder(context);
+      if (!file.existsSync()) {
+        return _buildPlaceholder(context);
+      }
 
       return Image.file(
         file,

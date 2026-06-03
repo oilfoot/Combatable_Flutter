@@ -89,11 +89,63 @@ class RemoteAddressablesService extends ChangeNotifier {
     return _downloadingKeys.contains(addressKey.trim());
   }
 
+  String? getCachedPreviewPath(String? previewPath) {
+    final trimmedPreviewPath = previewPath?.trim();
+
+    if (trimmedPreviewPath == null || trimmedPreviewPath.isEmpty) {
+      return null;
+    }
+
+    if (trimmedPreviewPath.startsWith('/')) {
+      final file = File(trimmedPreviewPath);
+      return file.existsSync() ? file.path : null;
+    }
+
+    if (trimmedPreviewPath.startsWith('http://') ||
+        trimmedPreviewPath.startsWith('https://')) {
+      return null;
+    }
+
+    final lower = trimmedPreviewPath.toLowerCase();
+    final isSupportedPreview =
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.mp4');
+
+    if (!isSupportedPreview) {
+      return null;
+    }
+
+    final addressablesDirPath = _addressablesDirPath;
+
+    if (addressablesDirPath == null || addressablesDirPath.isEmpty) {
+      return null;
+    }
+
+    final filename = trimmedPreviewPath.split('/').last.trim();
+
+    if (filename.isEmpty) {
+      return null;
+    }
+
+    final localPreviewFile = File('$addressablesDirPath/previews/$filename');
+    return localPreviewFile.existsSync() ? localPreviewFile.path : null;
+  }
+
   Future<String?> getOrDownloadPreview(String? previewPath) async {
     final trimmedPreviewPath = previewPath?.trim();
 
     if (trimmedPreviewPath == null || trimmedPreviewPath.isEmpty) {
       return null;
+    }
+
+    final cachedPreviewPath = getCachedPreviewPath(trimmedPreviewPath);
+
+    if (cachedPreviewPath != null) {
+      return cachedPreviewPath;
     }
 
     if (trimmedPreviewPath.startsWith('/')) {

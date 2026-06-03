@@ -42,6 +42,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       isDownloading: entry.isDownloading,
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+      resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       onPrimaryAction: () async {
         try {
           await widget.libraryController.performPrimaryAction(entry);
@@ -100,6 +101,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 showStatus: entry.isRemote,
                 buttonText: library.getPrimaryActionLabel(entry),
                 resolvePreviewPath: library.getOrDownloadPreview,
+                resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),
                 onPrimaryAction: () => _handlePrimaryAction(entry),
               );

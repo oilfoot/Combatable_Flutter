@@ -58,6 +58,10 @@ class LibraryController extends ChangeNotifier {
     return _remoteAddressablesService.getOrDownloadPreview(previewPath);
   }
 
+  String? getCachedPreviewPath(String? previewPath) {
+    return _remoteAddressablesService.getCachedPreviewPath(previewPath);
+  }
+
   List<LibraryDisplayItem> get allItems {
     final Map<String, LibraryDisplayItem> byAnimationName = {};
 
