@@ -110,15 +110,13 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _openUnityPreview() async {
-    if (mounted && _currentIndex != 2) {
-      setState(() {
-        _currentIndex = 2;
-      });
-    }
+    await widget.unityService.resumeUnity();
 
-    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
 
-    await buildAndOpenUnity();
+    setState(() {
+      _currentIndex = 2;
+    });
   }
 
   Future<void> _onNavTapped(int index) async {
@@ -126,7 +124,6 @@ class _AppShellState extends State<AppShell> {
 
     if (_currentIndex == 2 && index != 2) {
       await widget.unityService.pauseUnity();
-      _remoteAddressablesService.markUnityStateDirty();
     }
 
     if (index == 2) {

@@ -10,6 +10,9 @@ class UnityService {
   bool _isInitialized = false;
   bool _isUnityReady = false;
 
+  String? _lastSequenceName;
+  List<String> _lastAnimations = const [];
+
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
 
@@ -306,7 +309,20 @@ class UnityService {
     required String sequenceName,
     required List<String> animations,
   }) async {
+    final isSameSequence =
+        _lastSequenceName == sequenceName &&
+        _lastAnimations.length == animations.length &&
+        _lastAnimations.join('|') == animations.join('|');
+
     await resumeUnity();
+
+    if (isSameSequence) {
+      _log('Preview already loaded. Skipping Unity reload.');
+      return;
+    }
+
+    _lastSequenceName = sequenceName;
+    _lastAnimations = List<String>.from(animations);
 
     await Future<void>.delayed(const Duration(milliseconds: 150));
 
@@ -337,6 +353,9 @@ class UnityService {
     if (_isInitialized) {
       bridge.dispose();
     }
+
+    _lastSequenceName = null;
+    _lastAnimations = const [];
 
     _isInitialized = false;
     _isUnityReady = false;

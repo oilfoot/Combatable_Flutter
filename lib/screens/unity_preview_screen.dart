@@ -52,17 +52,6 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
     });
   }
 
-  Future<void> _preparePreview() async {
-    await widget.unityService.preparePreview(
-      sequenceName: widget.sequenceController.sequenceName,
-      animations: widget.sequenceController.getAnimationNamesForUnity(),
-    );
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   Future<void> _beginTimelineScrub(double value) async {
     setState(() {
       _isScrubbing = true;
@@ -116,12 +105,6 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
             placeholder: const Center(child: CircularProgressIndicator()),
             onReady: (bridge) async {
               widget.unityService.markUnityReady();
-
-              await widget.unityService.preparePreview(
-                sequenceName: widget.sequenceController.sequenceName,
-                animations: widget.sequenceController
-                    .getAnimationNamesForUnity(),
-              );
 
               await widget.unityService.requestTestWord();
 
