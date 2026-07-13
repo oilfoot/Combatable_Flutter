@@ -1,4 +1,5 @@
 widgets/animation/
   animation_card.dart                  // shared standard + compact card system
+  animation_card_flight.dart           // captured-card overlay flight animation
   animation_preview_frame.dart         // preview image + lazy cache loading
   animation_info_sheet.dart            // detail popup

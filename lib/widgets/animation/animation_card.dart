@@ -6,6 +6,8 @@ import 'animation_preview_frame.dart';
 enum AnimationCardVariant { standard, compact }
 
 class AnimationCard extends StatelessWidget {
+  static const double compactExtent = 112;
+
   const AnimationCard.standard({
     super.key,
     required this.item,
@@ -16,6 +18,7 @@ class AnimationCard extends StatelessWidget {
     required this.isDownloading,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
+    this.flightKey,
     this.width = 240,
   }) : variant = AnimationCardVariant.standard,
        onInfoTap = null;
@@ -28,6 +31,7 @@ class AnimationCard extends StatelessWidget {
     required this.isDownloading,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
+    this.flightKey,
   }) : variant = AnimationCardVariant.compact,
        onTap = null,
        actionLabel = null,
@@ -44,6 +48,7 @@ class AnimationCard extends StatelessWidget {
   final bool isDownloading;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
+  final GlobalKey? flightKey;
   final double? width;
 
   bool get _isCompact => variant == AnimationCardVariant.compact;
@@ -88,8 +93,11 @@ class AnimationCard extends StatelessWidget {
       ),
     );
 
-    if (width == null) return card;
-    return SizedBox(width: width, child: card);
+    final sizedCard = width == null
+        ? card
+        : SizedBox(width: width, child: card);
+
+    return RepaintBoundary(key: flightKey, child: sizedCard);
   }
 
   VoidCallback? _resolveCardTap() {

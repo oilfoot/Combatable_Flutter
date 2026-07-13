@@ -7,11 +7,17 @@ import '../controllers/library_controller.dart';
 import 'library_search_screen.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card.dart';
+import '../widgets/animation/animation_card_flight.dart';
 
 class FullLibraryScreen extends StatefulWidget {
-  const FullLibraryScreen({super.key, required this.libraryController});
+  const FullLibraryScreen({
+    super.key,
+    required this.libraryController,
+    required this.sequenceBuilderNavKey,
+  });
 
   final LibraryController libraryController;
+  final GlobalKey sequenceBuilderNavKey;
 
   @override
   State<FullLibraryScreen> createState() => _FullLibraryScreenState();
@@ -43,16 +49,14 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
-      onPrimaryAction: () async {
-        try {
-          await widget.libraryController.performPrimaryAction(entry);
-        } catch (e) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
-          );
-        }
-      },
+      onAnimatedPrimaryAction: (sourceKey) => AnimationCardFlight.run(
+        sourceKey: sourceKey,
+        targetKey: widget.sequenceBuilderNavKey,
+        finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+        flightSize: const Size.square(AnimationCard.compactExtent),
+        action: () => _handlePrimaryAction(entry),
+      ),
+      onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }
 
@@ -92,8 +96,12 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
             itemCount: items.length,
             itemBuilder: (context, index) {
               final entry = items[index];
+              final flightKey = GlobalKey(
+                debugLabel: 'library-card-${entry.item.animationName}',
+              );
 
               return AnimationCard.standard(
+                flightKey: flightKey,
                 width: double.infinity,
                 item: entry.item,
                 isDownloaded: entry.isInstalled,
@@ -102,7 +110,12 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 resolvePreviewPath: library.getOrDownloadPreview,
                 resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),
-                onPrimaryAction: () => _handlePrimaryAction(entry),
+                onPrimaryAction: () => AnimationCardFlight.run(
+                  sourceKey: flightKey,
+                  targetKey: widget.sequenceBuilderNavKey,
+                  finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+                  action: () => _handlePrimaryAction(entry),
+                ),
               );
             },
           ),
@@ -149,6 +162,8 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                             MaterialPageRoute(
                               builder: (_) => LibrarySearchScreen(
                                 libraryController: library,
+                                sequenceBuilderNavKey:
+                                    widget.sequenceBuilderNavKey,
                               ),
                             ),
                           );

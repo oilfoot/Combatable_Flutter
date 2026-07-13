@@ -7,12 +7,14 @@ class FloatingNavBar extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.isExpanded,
+    required this.sequenceBuilderKey,
     required this.onNavPressed,
     required this.onTap,
   });
 
   final int currentIndex;
   final bool isExpanded;
+  final GlobalKey sequenceBuilderKey;
   final VoidCallback onNavPressed;
   final Future<void> Function(int index) onTap;
 
@@ -69,6 +71,7 @@ class FloatingNavBar extends StatelessWidget {
                   onTap: () => onTap(2),
                 ),
                 _NavButton(
+                  key: sequenceBuilderKey,
                   icon: Icons.playlist_add_rounded,
                   isSelected: currentIndex == 3,
                   onPressStart: onNavPressed,
@@ -91,6 +94,7 @@ class FloatingNavBar extends StatelessWidget {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({
+    super.key,
     required this.icon,
     required this.isSelected,
     required this.onPressStart,

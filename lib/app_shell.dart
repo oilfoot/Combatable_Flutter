@@ -36,6 +36,9 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 1;
   bool _isNavExpanded = false;
+  final GlobalKey _sequenceBuilderNavKey = GlobalKey(
+    debugLabel: 'sequence-builder-nav-target',
+  );
 
   late final RemoteAddressablesService _remoteAddressablesService;
   late final LibraryController _libraryController;
@@ -58,7 +61,10 @@ class _AppShellState extends State<AppShell> {
 
     _pages = [
       const HomeScreen(),
-      FullLibraryScreen(libraryController: _libraryController),
+      FullLibraryScreen(
+        libraryController: _libraryController,
+        sequenceBuilderNavKey: _sequenceBuilderNavKey,
+      ),
       UnityPreviewScreen(
         unityService: widget.unityService,
         sequenceController: widget.sequenceController,
@@ -172,6 +178,7 @@ class _AppShellState extends State<AppShell> {
             child: FloatingNavBar(
               currentIndex: _currentIndex,
               isExpanded: _isNavExpanded,
+              sequenceBuilderKey: _sequenceBuilderNavKey,
               onNavPressed: _expandNav,
               onTap: _onNavTapped,
             ),

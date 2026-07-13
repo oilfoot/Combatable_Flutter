@@ -20,11 +20,12 @@ class SequenceBuilderLibrary extends StatelessWidget {
   final List<LibraryDisplayItem> items;
   final LibraryController libraryController;
   final Future<void> Function(LibraryDisplayItem entry) onItemTap;
-  final Future<void> Function(LibraryDisplayItem entry) onPrimaryAction;
+  final Future<void> Function(GlobalKey sourceKey, LibraryDisplayItem entry)
+  onPrimaryAction;
 
   static const double collapsedHeight = 264;
   static const double expandedHeightFactor = 0.85;
-  static const double animationCardExtent = 112;
+  static const double animationCardExtent = AnimationCard.compactExtent;
   static const double collapsedGridHeight = animationCardExtent + 4;
 
   @override
@@ -142,15 +143,21 @@ class SequenceBuilderLibrary extends StatelessWidget {
                               itemCount: items.length,
                               itemBuilder: (context, index) {
                                 final entry = items[index];
+                                final flightKey = GlobalKey(
+                                  debugLabel:
+                                      'builder-card-${entry.item.animationName}',
+                                );
                                 final card = AnimationCard.compact(
                                   key: ValueKey(entry.item.animationName),
+                                  flightKey: flightKey,
                                   item: entry.item,
                                   isDownloading: entry.isDownloading,
                                   resolvePreviewPath:
                                       libraryController.getOrDownloadPreview,
                                   resolveCachedPreviewPath:
                                       libraryController.getCachedPreviewPath,
-                                  onPrimaryAction: () => onPrimaryAction(entry),
+                                  onPrimaryAction: () =>
+                                      onPrimaryAction(flightKey, entry),
                                   onInfoTap: () => onItemTap(entry),
                                 );
 

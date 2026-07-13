@@ -4,13 +4,20 @@ import 'package:flutter/material.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
+import '../widgets/animation/animation_card.dart';
+import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_preview_frame.dart';
 
 class LibrarySearchScreen extends StatefulWidget {
-  const LibrarySearchScreen({super.key, required this.libraryController});
+  const LibrarySearchScreen({
+    super.key,
+    required this.libraryController,
+    required this.sequenceBuilderNavKey,
+  });
 
   final LibraryController libraryController;
+  final GlobalKey sequenceBuilderNavKey;
 
   @override
   State<LibrarySearchScreen> createState() => _LibrarySearchScreenState();
@@ -99,18 +106,28 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       isDownloading: entry.isDownloading,
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
-      onPrimaryAction: () async {
-        try {
-          await widget.libraryController.performPrimaryAction(entry);
-        } catch (e) {
-          if (!mounted) return;
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
-          );
-        }
-      },
+      resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      onAnimatedPrimaryAction: (sourceKey) => AnimationCardFlight.run(
+        sourceKey: sourceKey,
+        targetKey: widget.sequenceBuilderNavKey,
+        finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+        flightSize: const Size.square(AnimationCard.compactExtent),
+        action: () => _handlePrimaryAction(entry),
+      ),
+      onPrimaryAction: () => _handlePrimaryAction(entry),
     );
+  }
+
+  Future<void> _handlePrimaryAction(LibraryDisplayItem entry) async {
+    try {
+      await widget.libraryController.performPrimaryAction(entry);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
+      );
+    }
   }
 
   @override

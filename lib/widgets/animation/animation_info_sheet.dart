@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../models/animation_library_item.dart';
@@ -11,6 +13,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required this.isDownloading,
     required this.buttonText,
     required this.onPrimaryAction,
+    this.onAnimatedPrimaryAction,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
   });
@@ -20,6 +23,7 @@ class AnimationInfoSheet extends StatelessWidget {
   final bool isDownloading;
   final String buttonText;
   final Future<void> Function() onPrimaryAction;
+  final Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
 
@@ -30,6 +34,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required bool isDownloading,
     required String buttonText,
     required Future<void> Function() onPrimaryAction,
+    Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction,
     Future<String?> Function(String? previewPath)? resolvePreviewPath,
     String? Function(String? previewPath)? resolveCachedPreviewPath,
   }) {
@@ -45,6 +50,7 @@ class AnimationInfoSheet extends StatelessWidget {
           isDownloading: isDownloading,
           buttonText: buttonText,
           onPrimaryAction: onPrimaryAction,
+          onAnimatedPrimaryAction: onAnimatedPrimaryAction,
           resolvePreviewPath: resolvePreviewPath,
           resolveCachedPreviewPath: resolveCachedPreviewPath,
         );
@@ -55,6 +61,9 @@ class AnimationInfoSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final primaryActionKey = GlobalKey(
+      debugLabel: 'animation-info-primary-action',
+    );
 
     return DraggableScrollableSheet(
       initialChildSize: 0.78,
@@ -145,21 +154,40 @@ class AnimationInfoSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 28),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: isDownloading
-                              ? null
-                              : () async {
-                                  await onPrimaryAction();
-                                  if (context.mounted) {
-                                    Navigator.of(context).pop();
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                      RepaintBoundary(
+                        key: primaryActionKey,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: isDownloading
+                                ? null
+                                : () async {
+                                    final animatedAction =
+                                        onAnimatedPrimaryAction;
+
+                                    if (animatedAction == null) {
+                                      await onPrimaryAction();
+                                      if (context.mounted) {
+                                        Navigator.of(context).pop();
+                                      }
+                                      return;
+                                    }
+
+                                    final flight = animatedAction(
+                                      primaryActionKey,
+                                    );
+
+                                    if (context.mounted) {
+                                      Navigator.of(context).pop();
+                                    }
+
+                                    unawaited(flight);
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: Text(buttonText),
                           ),
-                          child: Text(buttonText),
                         ),
                       ),
                       const SizedBox(height: 12),

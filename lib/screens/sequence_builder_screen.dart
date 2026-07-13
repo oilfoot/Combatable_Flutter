@@ -4,6 +4,7 @@ import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
 import '../models/animation_library_item.dart';
 import '../widgets/animation/animation_info_sheet.dart';
+import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_preview_frame.dart';
 import '../widgets/sequence_builder_library.dart';
 
@@ -25,6 +26,12 @@ class SequenceBuilderScreen extends StatefulWidget {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   late final TextEditingController _sequenceNameController;
+  final GlobalKey _timelineTargetKey = GlobalKey(
+    debugLabel: 'sequence-timeline-flight-target',
+  );
+  final GlobalKey _libraryPanelKey = GlobalKey(
+    debugLabel: 'sequence-library-panel',
+  );
   bool _isLibraryExpanded = false;
 
   @override
@@ -70,6 +77,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      onAnimatedPrimaryAction: (sourceKey) => _animateAndAdd(
+        sourceKey,
+        entry,
+        flightSize: const Size.square(
+          SequenceBuilderLibrary.animationCardExtent,
+        ),
+      ),
       onPrimaryAction: () async {
         await _handlePrimaryAction(entry);
       },
@@ -166,6 +180,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                           ),
                           const SizedBox(height: 16),
                           _TimelineSection(
+                            key: _timelineTargetKey,
                             items: sequence.selectedAnimations,
                             onRemoveAt: sequence.removeAnimationAt,
                             resolvePreviewPath:
@@ -197,12 +212,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: SequenceBuilderLibrary(
+                key: _libraryPanelKey,
                 isExpanded: _isLibraryExpanded,
                 onToggleExpanded: _toggleLibrary,
                 items: _libraryItems,
                 libraryController: widget.libraryController,
                 onItemTap: _showAnimationInfo,
-                onPrimaryAction: _handlePrimaryAction,
+                onPrimaryAction: _animateAndAdd,
               ),
             ),
           ],
@@ -215,6 +231,40 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     setState(() {
       _isLibraryExpanded = !_isLibraryExpanded;
     });
+  }
+
+  Future<void> _animateAndAdd(
+    GlobalKey sourceKey,
+    LibraryDisplayItem entry, {
+    Size? flightSize,
+  }) {
+    return AnimationCardFlight.run(
+      sourceKey: sourceKey,
+      targetKey: _isLibraryExpanded ? null : _timelineTargetKey,
+      behindPanelKey: _isLibraryExpanded ? _libraryPanelKey : null,
+      destination: _isLibraryExpanded ? _expandedPanelDestination : null,
+      finalScale: _isLibraryExpanded
+          ? AnimationCardFlightTuning.expandedBuilderFinalScale
+          : AnimationCardFlightTuning.collapsedBuilderFinalScale,
+      flightSize: flightSize,
+      actionTiming: AnimationFlightActionTiming.afterFlight,
+      action: () => _handlePrimaryAction(entry),
+    );
+  }
+
+  Offset _expandedPanelDestination(Rect sourceRect) {
+    final panelBox = _libraryPanelKey.currentContext?.findRenderObject();
+
+    if (panelBox is RenderBox) {
+      final panelTop = panelBox.localToGlobal(Offset.zero).dy;
+      return Offset(
+        sourceRect.center.dx,
+        panelTop + AnimationCardFlightTuning.behindDiveDepth,
+      );
+    }
+
+    final fallbackY = sourceRect.top > 160 ? sourceRect.top - 120 : 40.0;
+    return Offset(sourceRect.center.dx, fallbackY);
   }
 }
 
@@ -320,6 +370,7 @@ class _SequenceHeader extends StatelessWidget {
 
 class _TimelineSection extends StatelessWidget {
   const _TimelineSection({
+    super.key,
     required this.items,
     required this.onRemoveAt,
     required this.resolvePreviewPath,
