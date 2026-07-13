@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
 import '../models/animation_library_item.dart';
@@ -113,81 +112,109 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
     final theme = Theme.of(context);
-    final libraryHeight =
-        (_isLibraryExpanded ? 300.0 : 185.0) +
-        AppShell.floatingNavExtraScrollSpace;
+    const timelineBottomPadding = SequenceBuilderLibrary.collapsedHeight + 16;
 
     return Scaffold(
       body: SafeArea(
         bottom: false,
-        child: Column(
+        child: Stack(
           children: [
-            _SequenceHeader(
-              sequenceNameController: _sequenceNameController,
-              onNameChanged: sequence.setSequenceName,
-              onBuildUnitySequence: widget.onBuildUnitySequence,
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(16, 14, 16, libraryHeight + 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'Timeline',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
+            Positioned.fill(
+              child: Column(
+                children: [
+                  _SequenceHeader(
+                    sequenceNameController: _sequenceNameController,
+                    onNameChanged: sequence.setSequenceName,
+                    onBuildUnitySequence: widget.onBuildUnitySequence,
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(
+                        16,
+                        14,
+                        16,
+                        timelineBottomPadding,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                'Timeline',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (sequence.selectedAnimations.isNotEmpty)
+                                TextButton.icon(
+                                  onPressed: sequence.clearAnimations,
+                                  icon: const Icon(Icons.refresh, size: 18),
+                                  label: const Text('Clear All'),
+                                ),
+                            ],
                           ),
-                        ),
-                        const Spacer(),
-                        if (sequence.selectedAnimations.isNotEmpty)
-                          TextButton.icon(
-                            onPressed: sequence.clearAnimations,
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text('Clear All'),
+                          const SizedBox(height: 6),
+                          Text(
+                            _timelineRequirementText,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _timelineRequirementText,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
+                          const SizedBox(height: 16),
+                          _TimelineSection(
+                            items: sequence.selectedAnimations,
+                            onRemoveAt: sequence.removeAnimationAt,
+                            resolvePreviewPath:
+                                widget.libraryController.getOrDownloadPreview,
+                            resolveCachedPreviewPath:
+                                widget.libraryController.getCachedPreviewPath,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    _TimelineSection(
-                      items: sequence.selectedAnimations,
-                      onRemoveAt: sequence.removeAnimationAt,
-                      resolvePreviewPath:
-                          widget.libraryController.getOrDownloadPreview,
-                      resolveCachedPreviewPath:
-                          widget.libraryController.getCachedPreviewPath,
-                    ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: !_isLibraryExpanded,
+                child: AnimatedOpacity(
+                  opacity: _isLibraryExpanded ? 1 : 0,
+                  duration: const Duration(milliseconds: 220),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleLibrary,
+                    child: const ColoredBox(color: Color(0x66000000)),
+                  ),
                 ),
               ),
             ),
-            SequenceBuilderLibrary(
-              isExpanded: _isLibraryExpanded,
-              onToggleExpanded: () {
-                setState(() {
-                  _isLibraryExpanded = !_isLibraryExpanded;
-                });
-              },
-              items: _libraryItems,
-              libraryController: widget.libraryController,
-              onItemTap: _showAnimationInfo,
-              onPrimaryAction: _handlePrimaryAction,
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SequenceBuilderLibrary(
+                isExpanded: _isLibraryExpanded,
+                onToggleExpanded: _toggleLibrary,
+                items: _libraryItems,
+                libraryController: widget.libraryController,
+                onItemTap: _showAnimationInfo,
+                onPrimaryAction: _handlePrimaryAction,
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _toggleLibrary() {
+    setState(() {
+      _isLibraryExpanded = !_isLibraryExpanded;
+    });
   }
 }
 
