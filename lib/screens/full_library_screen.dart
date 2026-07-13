@@ -49,13 +49,15 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
-      onAnimatedPrimaryAction: (sourceKey) => AnimationCardFlight.run(
-        sourceKey: sourceKey,
-        targetKey: widget.sequenceBuilderNavKey,
-        finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-        flightSize: const Size.square(AnimationCard.compactExtent),
-        action: () => _handlePrimaryAction(entry),
-      ),
+      onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
+          ? null
+          : (sourceKey) => AnimationCardFlight.run(
+              sourceKey: sourceKey,
+              targetKey: widget.sequenceBuilderNavKey,
+              finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+              flightSize: const Size.square(AnimationCard.compactExtent),
+              action: () => _handlePrimaryAction(entry),
+            ),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }
@@ -110,12 +112,18 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 resolvePreviewPath: library.getOrDownloadPreview,
                 resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),
-                onPrimaryAction: () => AnimationCardFlight.run(
-                  sourceKey: flightKey,
-                  targetKey: widget.sequenceBuilderNavKey,
-                  finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-                  action: () => _handlePrimaryAction(entry),
-                ),
+                onPrimaryAction: () {
+                  if (library.requiresDownload(entry)) {
+                    return _handlePrimaryAction(entry);
+                  }
+
+                  return AnimationCardFlight.run(
+                    sourceKey: flightKey,
+                    targetKey: widget.sequenceBuilderNavKey,
+                    finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+                    action: () => _handlePrimaryAction(entry),
+                  );
+                },
               );
             },
           ),

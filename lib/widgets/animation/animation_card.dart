@@ -28,6 +28,7 @@ class AnimationCard extends StatelessWidget {
     required this.item,
     required this.onPrimaryAction,
     required this.onInfoTap,
+    required this.isDownloaded,
     required this.isDownloading,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
@@ -35,7 +36,6 @@ class AnimationCard extends StatelessWidget {
   }) : variant = AnimationCardVariant.compact,
        onTap = null,
        actionLabel = null,
-       isDownloaded = true,
        width = null;
 
   final AnimationLibraryItem item;
@@ -150,6 +150,37 @@ class AnimationCard extends StatelessWidget {
           ),
         ),
       ),
+      if (!isDownloaded || isDownloading)
+        Positioned(
+          top: 6,
+          right: 6,
+          child: Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.48),
+              border: Border.all(
+                color: const Color(0xFFC8A7FF).withValues(alpha: 0.42),
+              ),
+            ),
+            child: isDownloading
+                ? const SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: Color(0xFFC8A7FF),
+                    ),
+                  )
+                : const Icon(
+                    Icons.download_rounded,
+                    size: 15,
+                    color: Color(0xFFC8A7FF),
+                  ),
+          ),
+        ),
       Positioned(
         left: 10,
         right: 10,

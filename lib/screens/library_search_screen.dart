@@ -107,13 +107,15 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
-      onAnimatedPrimaryAction: (sourceKey) => AnimationCardFlight.run(
-        sourceKey: sourceKey,
-        targetKey: widget.sequenceBuilderNavKey,
-        finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-        flightSize: const Size.square(AnimationCard.compactExtent),
-        action: () => _handlePrimaryAction(entry),
-      ),
+      onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
+          ? null
+          : (sourceKey) => AnimationCardFlight.run(
+              sourceKey: sourceKey,
+              targetKey: widget.sequenceBuilderNavKey,
+              finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+              flightSize: const Size.square(AnimationCard.compactExtent),
+              action: () => _handlePrimaryAction(entry),
+            ),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }

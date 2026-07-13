@@ -151,6 +151,7 @@ class SequenceBuilderLibrary extends StatelessWidget {
                                   key: ValueKey(entry.item.animationName),
                                   flightKey: flightKey,
                                   item: entry.item,
+                                  isDownloaded: entry.isInstalled,
                                   isDownloading: entry.isDownloading,
                                   resolvePreviewPath:
                                       libraryController.getOrDownloadPreview,

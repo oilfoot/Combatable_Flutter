@@ -77,13 +77,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
-      onAnimatedPrimaryAction: (sourceKey) => _animateAndAdd(
-        sourceKey,
-        entry,
-        flightSize: const Size.square(
-          SequenceBuilderLibrary.animationCardExtent,
-        ),
-      ),
+      onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
+          ? null
+          : (sourceKey) => _animateAndAdd(
+              sourceKey,
+              entry,
+              flightSize: const Size.square(
+                SequenceBuilderLibrary.animationCardExtent,
+              ),
+            ),
       onPrimaryAction: () async {
         await _handlePrimaryAction(entry);
       },
@@ -238,6 +240,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     LibraryDisplayItem entry, {
     Size? flightSize,
   }) {
+    if (widget.libraryController.requiresDownload(entry)) {
+      return _handlePrimaryAction(entry);
+    }
+
     return AnimationCardFlight.run(
       sourceKey: sourceKey,
       targetKey: _isLibraryExpanded ? null : _timelineTargetKey,

@@ -124,18 +124,22 @@ class LibraryController extends ChangeNotifier {
 
   String getPrimaryActionLabel(LibraryDisplayItem entry) {
     if (entry.isDownloading) return 'Downloading...';
-    if (!entry.isRemote) return 'Add';
-    if (entry.isInstalled) return 'Add';
-    return 'Download & Add';
+    if (requiresDownload(entry)) return 'Download';
+    return 'Add';
+  }
+
+  bool requiresDownload(LibraryDisplayItem entry) {
+    return entry.isRemote && !entry.isInstalled;
   }
 
   Future<void> performPrimaryAction(LibraryDisplayItem entry) async {
     if (entry.isDownloading) return;
 
-    if (entry.isRemote && !entry.isInstalled) {
+    if (requiresDownload(entry)) {
       await _remoteAddressablesService.downloadAnimation(
         entry.item.downloadKey,
       );
+      return;
     }
 
     _sequenceController.addAnimationItem(entry.item);
