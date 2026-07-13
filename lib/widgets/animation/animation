@@ -1,6 +1,4 @@
 widgets/animation/
-  animation_library_card.dart          // card layout only
+  animation_card.dart                  // shared standard + compact card system
   animation_preview_frame.dart         // preview image + lazy cache loading
-  animation_status_badge.dart          // installed / downloading badge
-  animation_primary_action_button.dart // button component
   animation_info_sheet.dart            // detail popup

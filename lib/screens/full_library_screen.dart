@@ -6,7 +6,7 @@ import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import 'library_search_screen.dart';
 import '../widgets/animation/animation_info_sheet.dart';
-import '../widgets/animation/animation_library_card.dart';
+import '../widgets/animation/animation_card.dart';
 
 class FullLibraryScreen extends StatefulWidget {
   const FullLibraryScreen({super.key, required this.libraryController});
@@ -93,13 +93,12 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
             itemBuilder: (context, index) {
               final entry = items[index];
 
-              return AnimationLibraryCard(
+              return AnimationCard.standard(
                 width: double.infinity,
                 item: entry.item,
                 isDownloaded: entry.isInstalled,
                 isDownloading: entry.isDownloading,
-                showStatus: entry.isRemote,
-                buttonText: library.getPrimaryActionLabel(entry),
+                actionLabel: library.getPrimaryActionLabel(entry),
                 resolvePreviewPath: library.getOrDownloadPreview,
                 resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),

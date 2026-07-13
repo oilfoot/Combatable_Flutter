@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
-import '../widgets/animation/animation_preview_frame.dart';
+import 'animation/animation_card.dart';
 
 class SequenceBuilderLibrary extends StatelessWidget {
   const SequenceBuilderLibrary({
@@ -142,11 +142,15 @@ class SequenceBuilderLibrary extends StatelessWidget {
                               itemCount: items.length,
                               itemBuilder: (context, index) {
                                 final entry = items[index];
-                                final card = _SequenceLibraryMiniCard(
+                                final card = AnimationCard.compact(
                                   key: ValueKey(entry.item.animationName),
-                                  entry: entry,
-                                  libraryController: libraryController,
-                                  onTap: () => onPrimaryAction(entry),
+                                  item: entry.item,
+                                  isDownloading: entry.isDownloading,
+                                  resolvePreviewPath:
+                                      libraryController.getOrDownloadPreview,
+                                  resolveCachedPreviewPath:
+                                      libraryController.getCachedPreviewPath,
+                                  onPrimaryAction: () => onPrimaryAction(entry),
                                   onInfoTap: () => onItemTap(entry),
                                 );
 
@@ -178,121 +182,6 @@ class SequenceBuilderLibrary extends StatelessWidget {
                     ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SequenceLibraryMiniCard extends StatelessWidget {
-  const _SequenceLibraryMiniCard({
-    super.key,
-    required this.entry,
-    required this.libraryController,
-    required this.onTap,
-    required this.onInfoTap,
-  });
-
-  final LibraryDisplayItem entry;
-  final LibraryController libraryController;
-  final Future<void> Function() onTap;
-  final VoidCallback onInfoTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final item = entry.item;
-
-    return Material(
-      color: Colors.white.withOpacity(0.045),
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: entry.isDownloading
-            ? null
-            : () async {
-                await onTap();
-              },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              AnimationPreviewFrame(
-                previewPath: item.previewPath,
-                resolvePreviewPath: libraryController.getOrDownloadPreview,
-                resolveCachedPreviewPath:
-                    libraryController.getCachedPreviewPath,
-              ),
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Color(0x20000000),
-                      Color(0xB8000000),
-                    ],
-                    stops: [0.40, 0.70, 1.0],
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.10)),
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 6,
-                left: 6,
-                child: GestureDetector(
-                  onTap: onInfoTap,
-                  child: Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.34),
-                      border: Border.all(color: Colors.white.withOpacity(0.16)),
-                    ),
-                    child: const Icon(
-                      Icons.info_outline,
-                      size: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: 10,
-                right: 10,
-                bottom: 10,
-                child: Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    height: 1.02,
-                    fontWeight: FontWeight.w800,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black,
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
