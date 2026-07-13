@@ -114,20 +114,19 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     return widget.libraryController.allItems;
   }
 
-  String get _timelineRequirementText {
+  String get _requiredNextPosition {
     final requiredStart = widget.sequenceController.requiredNextStartPosition;
 
     if (requiredStart == null || requiredStart.trim().isEmpty) {
-      return 'Next position: Any';
+      return 'Any';
     }
 
-    return 'Required next position: $requiredStart';
+    return requiredStart.trim();
   }
 
   @override
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
-    final theme = Theme.of(context);
     const timelineBottomPadding = SequenceBuilderLibrary.collapsedHeight + 16;
 
     return Scaffold(
@@ -154,37 +153,48 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Text(
-                                'Timeline',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
+                          SizedBox(
+                            height: 40,
+                            child: Row(
+                              children: [
+                                const Text(
+                                  'Timeline',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
-                              ),
-                              const Spacer(),
-                              if (sequence.selectedAnimations.isNotEmpty)
-                                TextButton.icon(
-                                  onPressed: sequence.clearAnimations,
-                                  icon: const Icon(Icons.refresh, size: 18),
-                                  label: const Text('Clear All'),
+                                const Spacer(),
+                                Visibility(
+                                  visible:
+                                      sequence.selectedAnimations.isNotEmpty,
+                                  maintainAnimation: true,
+                                  maintainSize: true,
+                                  maintainState: true,
+                                  child: TextButton.icon(
+                                    onPressed: sequence.clearAnimations,
+                                    icon: const Icon(Icons.refresh, size: 18),
+                                    label: const Text('Clear All'),
+                                    style: TextButton.styleFrom(
+                                      minimumSize: const Size(0, 36),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _timelineRequirementText,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           _TimelineSection(
                             key: _timelineTargetKey,
                             items: sequence.selectedAnimations,
+                            requiredNextPosition: _requiredNextPosition,
                             onRemoveAt: sequence.removeAnimationAt,
+                            onAddStep: _expandLibrary,
                             resolvePreviewPath:
                                 widget.libraryController.getOrDownloadPreview,
                             resolveCachedPreviewPath:
@@ -232,6 +242,14 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   void _toggleLibrary() {
     setState(() {
       _isLibraryExpanded = !_isLibraryExpanded;
+    });
+  }
+
+  void _expandLibrary() {
+    if (_isLibraryExpanded) return;
+
+    setState(() {
+      _isLibraryExpanded = true;
     });
   }
 
@@ -378,31 +396,33 @@ class _TimelineSection extends StatelessWidget {
   const _TimelineSection({
     super.key,
     required this.items,
+    required this.requiredNextPosition,
     required this.onRemoveAt,
+    required this.onAddStep,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
   });
 
   final List<AnimationLibraryItem> items;
+  final String requiredNextPosition;
   final void Function(int index) onRemoveAt;
+  final VoidCallback onAddStep;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return _EmptyTimelinePlaceholder();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _PositionPill(
-          label: 'Start',
-          value: items.first.startPosition,
-          color: const Color(0xFF45D483),
-        ),
-        const SizedBox(height: 12),
+        if (items.isNotEmpty) ...[
+          _PositionPill(
+            label: 'Start',
+            value: items.first.startPosition,
+            color: const Color(0xFF45D483),
+          ),
+          const SizedBox(height: 12),
+        ],
         for (var index = 0; index < items.length; index++) ...[
           _TimelineAnimationTile(
             index: index,
@@ -419,43 +439,105 @@ class _TimelineSection extends StatelessWidget {
                 ? const Color(0xFFFF5353)
                 : const Color(0xFFC8A7FF),
           ),
-          if (index != items.length - 1) const SizedBox(height: 10),
+          const SizedBox(height: 10),
         ],
+        _AddTimelineStep(
+          index: items.length,
+          requiredPosition: requiredNextPosition,
+          isFirstStep: items.isEmpty,
+          onTap: onAddStep,
+        ),
       ],
     );
   }
 }
 
-class _EmptyTimelinePlaceholder extends StatelessWidget {
+class _AddTimelineStep extends StatelessWidget {
+  const _AddTimelineStep({
+    required this.index,
+    required this.requiredPosition,
+    required this.isFirstStep,
+    required this.onTap,
+  });
+
+  final int index;
+  final String requiredPosition;
+  final bool isFirstStep;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 18),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.timeline_outlined,
-            size: 34,
-            color: Colors.white.withOpacity(0.35),
+    return Row(
+      children: [
+        _StepNumber(index: index, isPending: true),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Material(
+            color: Colors.white.withOpacity(0.035),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(color: Colors.white.withOpacity(0.10)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8F55FF).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFFC8A7FF).withOpacity(0.38),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        size: 34,
+                        color: Color(0xFFC8A7FF),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isFirstStep
+                                ? 'Add first animation'
+                                : 'Add next animation',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            requiredPosition == 'Any'
+                                ? 'Any start position'
+                                : 'Required start: $requiredPosition',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.60),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            'No animations selected yet',
-            style: TextStyle(color: Colors.white.withOpacity(0.72)),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Add one from the library below.',
-            style: TextStyle(color: Colors.white.withOpacity(0.44)),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -477,71 +559,106 @@ class _TimelineAnimationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withOpacity(0.09)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 24,
-            child: Text(
-              '${index + 1}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.72),
-                fontWeight: FontWeight.w800,
-              ),
+    return Row(
+      children: [
+        _StepNumber(index: index),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withOpacity(0.09)),
             ),
-          ),
-          const SizedBox(width: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 72,
-              height: 54,
-              child: AnimationPreviewFrame(
-                previewPath: item.previewPath,
-                resolvePreviewPath: resolvePreviewPath,
-                resolveCachedPreviewPath: resolveCachedPreviewPath,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: AnimationPreviewFrame(
+                      previewPath: item.previewPath,
+                      resolvePreviewPath: resolvePreviewPath,
+                      resolveCachedPreviewPath: resolveCachedPreviewPath,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  item.animationName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.56),
-                    fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.animationName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.56),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                IconButton(
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: onRemove,
-            icon: const Icon(Icons.delete_outline),
-          ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _StepNumber extends StatelessWidget {
+  const _StepNumber({required this.index, this.isPending = false});
+
+  final int index;
+  final bool isPending;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = isPending
+        ? const Color(0xFFC8A7FF)
+        : Colors.white.withOpacity(0.78);
+
+    return Container(
+      width: 28,
+      height: 28,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isPending
+            ? const Color(0xFF8F55FF).withOpacity(0.12)
+            : Colors.white.withOpacity(0.06),
+        border: Border.all(
+          color: isPending
+              ? const Color(0xFFC8A7FF).withOpacity(0.38)
+              : Colors.white.withOpacity(0.12),
+        ),
+      ),
+      child: Text(
+        '${index + 1}',
+        style: TextStyle(
+          color: foreground,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -563,10 +680,10 @@ class _PositionPill extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 42,
+          width: 50,
           alignment: Alignment.centerLeft,
           child: Text(
-            label,
+            '$label:',
             style: TextStyle(
               color: Colors.white.withOpacity(0.65),
               fontWeight: FontWeight.w700,
@@ -580,16 +697,9 @@ class _PositionPill extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: color.withOpacity(0.42)),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.location_on, size: 15, color: color),
-              const SizedBox(width: 5),
-              Text(
-                value,
-                style: TextStyle(color: color, fontWeight: FontWeight.w800),
-              ),
-            ],
+          child: Text(
+            value,
+            style: TextStyle(color: color, fontWeight: FontWeight.w800),
           ),
         ),
       ],
