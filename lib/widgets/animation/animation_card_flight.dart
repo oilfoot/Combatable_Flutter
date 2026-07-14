@@ -14,11 +14,19 @@ enum AnimationFlightActionTiming { alongsideFlight, afterFlight }
 ///
 /// Change these values to adjust the feel without touching the animation code.
 abstract final class AnimationCardFlightTuning {
-  static const Duration duration = Duration(milliseconds: 480);
+  static const Duration duration = Duration(milliseconds: 400);
   static const bool fadeOutAtEnd = true;
   static const double fadeStart = 0.85;
   static const double arcLift = 72;
   static const double maxRotation = 0.07;
+
+  /// Keeps bright and dark preview images readable while they are in flight.
+  static const double ghostCornerRadius = 14;
+  static const double ghostStrokeWidth = 1;
+  static const Color ghostStrokeColor = Color(0x40FFFFFF);
+  static const Color ghostShadowColor = Color(0x73000000);
+  static const double ghostShadowBlur = 18;
+  static const double ghostShadowSpread = 0;
 
   /// 0 is linear. Values closer to 1 make the start/end faster and the
   /// middle slower. Keep this below 1 so progress always moves forward.
@@ -47,6 +55,7 @@ class AnimationCardFlight {
     bool useSnapshot = false,
     bool? fadeOut,
     Size? flightSize,
+    Widget? flightChild,
     AnimationFlightActionTiming actionTiming =
         AnimationFlightActionTiming.alongsideFlight,
   }) async {
@@ -126,6 +135,7 @@ class AnimationCardFlight {
       entry = OverlayEntry(
         builder: (_) => _AnimationCardFlightOverlay(
           image: cardImage,
+          flightChild: flightChild,
           sourceRect: localSourceRect,
           targetCenter: localTargetCenter,
           finalScale: finalScale,
@@ -170,6 +180,7 @@ class AnimationCardFlight {
 class _AnimationCardFlightOverlay extends StatefulWidget {
   const _AnimationCardFlightOverlay({
     required this.image,
+    required this.flightChild,
     required this.sourceRect,
     required this.targetCenter,
     required this.finalScale,
@@ -179,6 +190,7 @@ class _AnimationCardFlightOverlay extends StatefulWidget {
   });
 
   final ui.Image? image;
+  final Widget? flightChild;
   final Rect sourceRect;
   final Offset targetCenter;
   final double finalScale;
@@ -253,13 +265,16 @@ class _AnimationCardFlightOverlayState
                       scale: scale,
                       child: Transform.rotate(
                         angle: rotation,
-                        child: widget.image == null
-                            ? const _FallbackFlightCard()
-                            : RawImage(
-                                image: widget.image,
-                                fit: BoxFit.fill,
-                                filterQuality: FilterQuality.high,
-                              ),
+                        child: _FlightGhostFrame(
+                          child: widget.image == null
+                              ? widget.flightChild ??
+                                    const _FallbackFlightCard()
+                              : RawImage(
+                                  image: widget.image,
+                                  fit: BoxFit.fill,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                        ),
                       ),
                     ),
                   ),
@@ -331,6 +346,43 @@ class _AnimationCardFlightOverlayState
       inverse * inverse * start.dy +
           2 * inverse * t * control.dy +
           t * t * end.dy,
+    );
+  }
+}
+
+class _FlightGhostFrame extends StatelessWidget {
+  const _FlightGhostFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    const radius = AnimationCardFlightTuning.ghostCornerRadius;
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: const [
+          BoxShadow(
+            color: AnimationCardFlightTuning.ghostShadowColor,
+            blurRadius: AnimationCardFlightTuning.ghostShadowBlur,
+            spreadRadius: AnimationCardFlightTuning.ghostShadowSpread,
+          ),
+        ],
+      ),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: AnimationCardFlightTuning.ghostStrokeColor,
+          width: AnimationCardFlightTuning.ghostStrokeWidth,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          radius - AnimationCardFlightTuning.ghostStrokeWidth,
+        ),
+        child: child,
+      ),
     );
   }
 }

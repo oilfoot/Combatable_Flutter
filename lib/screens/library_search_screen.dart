@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
@@ -24,6 +25,8 @@ class LibrarySearchScreen extends StatefulWidget {
 }
 
 class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
+  static const _arrivalHapticDelay = Duration(milliseconds: 90);
+
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
 
@@ -109,12 +112,10 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
-          : (sourceKey) => AnimationCardFlight.run(
-              sourceKey: sourceKey,
-              targetKey: widget.sequenceBuilderNavKey,
-              finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+          : (sourceKey) => _animateAndAdd(
+              sourceKey,
+              entry,
               flightSize: const Size.square(AnimationCard.compactExtent),
-              action: () => _handlePrimaryAction(entry),
             ),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
@@ -130,6 +131,37 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
     }
+  }
+
+  Future<void> _animateAndAdd(
+    GlobalKey sourceKey,
+    LibraryDisplayItem entry, {
+    Size? flightSize,
+  }) async {
+    unawaited(HapticFeedback.lightImpact());
+
+    final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
+      entry.item.previewPath,
+    );
+
+    await AnimationCardFlight.run(
+      sourceKey: sourceKey,
+      targetKey: widget.sequenceBuilderNavKey,
+      finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+      flightSize: flightSize ?? const Size.square(AnimationCard.compactExtent),
+      fadeOut: false,
+      flightChild: AnimationPreviewFrame(
+        previewPath: cachedPreviewPath ?? entry.item.previewPath,
+        resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+        resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      ),
+      actionTiming: AnimationFlightActionTiming.afterFlight,
+      action: () async {
+        await _handlePrimaryAction(entry);
+        await Future<void>.delayed(_arrivalHapticDelay);
+        await HapticFeedback.heavyImpact();
+      },
+    );
   }
 
   @override

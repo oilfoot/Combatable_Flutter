@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
@@ -25,6 +29,14 @@ class SequenceBuilderScreen extends StatefulWidget {
 }
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
+  static const _previewPopHapticDelay = Duration(milliseconds: 90);
+  static const _timelineInsertionScrollDelay = Duration(milliseconds: 200);
+
+  /// A completed step adds a 96 px tile, two 6 px gaps and a 28 px
+  /// position node. Reserve it before insertion so one scroll reveals both
+  /// the landing tile and the next placeholder.
+  static const double _incomingTimelineStepExtent = 136;
+
   late final TextEditingController _sequenceNameController;
   final ScrollController _timelineScrollController = ScrollController();
   final GlobalKey _timelineViewportKey = GlobalKey(
@@ -158,8 +170,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     final sequence = widget.sequenceController;
     final timelineBottomPadding =
         _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
-        ? SequenceBuilderLibrary.fullyCollapsedHeight + 16
-        : SequenceBuilderLibrary.collapsedHeight + 16;
+        ? SequenceBuilderLibrary.fullyCollapsedHeight +
+              16 +
+              _incomingTimelineStepExtent
+        : SequenceBuilderLibrary.collapsedHeight +
+              16 +
+              _incomingTimelineStepExtent;
 
     return Scaffold(
       body: SafeArea(
@@ -298,7 +314,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _setLibraryPanelState(SequenceBuilderLibraryPanelState.expanded);
   }
 
-  ({Future<void> scrolling, Offset? flightTarget}) _prepareAddStepFlight() {
+  ({Future<void> scrolling, Offset? flightTarget, bool preScrolled})
+  _prepareAddStepFlight() {
     final flightTargetBox =
         _addStepFlightTargetKey.currentContext?.findRenderObject()
             as RenderBox?;
@@ -310,6 +327,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       return (
         scrolling: Future<void>.value(),
         flightTarget: currentFlightTarget,
+        preScrolled: false,
       );
     }
 
@@ -324,6 +342,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       return (
         scrolling: Future<void>.value(),
         flightTarget: currentFlightTarget,
+        preScrolled: false,
       );
     }
 
@@ -331,6 +350,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     final addStepBottom = addStepBox
         .localToGlobal(Offset(0, addStepBox.size.height))
         .dy;
+    final incomingPlaceholderBottom =
+        addStepBottom + _incomingTimelineStepExtent;
     final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
     final viewportBottom = viewportBox
         .localToGlobal(Offset(0, viewportBox.size.height))
@@ -345,11 +366,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     if (addStepTop < visibleTop) {
       scrollDelta = addStepTop - visibleTop;
     } else if (addStepBottom > visibleBottom) {
-      scrollDelta = addStepBottom - visibleBottom;
+      scrollDelta = incomingPlaceholderBottom - visibleBottom;
     } else {
       return (
         scrolling: Future<void>.value(),
         flightTarget: currentFlightTarget,
+        preScrolled: false,
       );
     }
 
@@ -369,7 +391,53 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       curve: Curves.easeOutCubic,
     );
 
-    return (scrolling: scrolling, flightTarget: projectedFlightTarget);
+    return (
+      scrolling: scrolling,
+      flightTarget: projectedFlightTarget,
+      preScrolled: actualScrollDelta.abs() > 0.5,
+    );
+  }
+
+  Future<void> _scrollWithRevealingPlaceholder() async {
+    await Future<void>.delayed(_timelineInsertionScrollDelay);
+    if (!mounted || !_timelineScrollController.hasClients) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || !_timelineScrollController.hasClients) return;
+
+    final addStepBox =
+        _addStepTargetKey.currentContext?.findRenderObject() as RenderBox?;
+    final viewportBox =
+        _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    final panelBox =
+        _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (addStepBox == null || viewportBox == null || panelBox == null) return;
+
+    final addStepBottom = addStepBox
+        .localToGlobal(Offset(0, addStepBox.size.height))
+        .dy;
+    final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
+    final viewportBottom = viewportBox
+        .localToGlobal(Offset(0, viewportBox.size.height))
+        .dy;
+    final panelTop = panelBox.localToGlobal(Offset.zero).dy;
+    final visibleBottom = panelTop > viewportTop + 12
+        ? panelTop - 12
+        : viewportBottom - 12;
+
+    if (addStepBottom <= visibleBottom) return;
+
+    final position = _timelineScrollController.position;
+    final targetOffset =
+        (_timelineScrollController.offset + addStepBottom - visibleBottom)
+            .clamp(position.minScrollExtent, position.maxScrollExtent);
+
+    await _timelineScrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOutCubic,
+    );
   }
 
   Future<void> _animateAndAdd(
@@ -382,8 +450,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       return;
     }
 
+    unawaited(HapticFeedback.lightImpact());
+
     final addStepFlight = _prepareAddStepFlight();
     final flightTarget = addStepFlight.flightTarget;
+    final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
+      entry.item.previewPath,
+    );
     final flight = AnimationCardFlight.run(
       sourceKey: sourceKey,
       targetKey: flightTarget == null && !_isLibraryExpanded
@@ -399,8 +472,27 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           ? AnimationCardFlightTuning.expandedBuilderFinalScale
           : AnimationCardFlightTuning.collapsedBuilderFinalScale,
       flightSize: flightSize,
+      fadeOut: false,
+      flightChild: AnimationPreviewFrame(
+        previewPath: cachedPreviewPath ?? entry.item.previewPath,
+        resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+        resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      ),
       actionTiming: AnimationFlightActionTiming.afterFlight,
-      action: () => _handlePrimaryAction(entry),
+      action: () async {
+        final itemCountBefore =
+            widget.sequenceController.selectedAnimations.length;
+        await _handlePrimaryAction(entry);
+
+        if (widget.sequenceController.selectedAnimations.length >
+            itemCountBefore) {
+          if (!addStepFlight.preScrolled) {
+            unawaited(_scrollWithRevealingPlaceholder());
+          }
+          await Future<void>.delayed(_previewPopHapticDelay);
+          await HapticFeedback.heavyImpact();
+        }
+      },
     );
 
     await Future.wait<void>([addStepFlight.scrolling, flight]);
@@ -522,7 +614,7 @@ class _SequenceHeader extends StatelessWidget {
   }
 }
 
-class _TimelineSection extends StatelessWidget {
+class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
     super.key,
     required this.items,
@@ -547,48 +639,140 @@ class _TimelineSection extends StatelessWidget {
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
   @override
-  Widget build(BuildContext context) {
-    final firstPosition = items.isEmpty
-        ? requiredNextPosition
-        : items.first.startPosition;
+  State<_TimelineSection> createState() => _TimelineSectionState();
+}
 
-    return Stack(
-      children: [
-        Positioned(
-          left: 13.5,
-          top: 14,
-          bottom: 48,
-          child: Container(width: 1, color: Colors.white.withOpacity(0.14)),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+class _TimelineSectionState extends State<_TimelineSection>
+    with SingleTickerProviderStateMixin {
+  static const _insertionDuration = Duration(milliseconds: 720);
+  static const double _baseRailHeight = 68;
+  static const double _stepRailHeight = 136;
+
+  late final AnimationController _insertionController;
+  int? _insertingIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _insertionController = AnimationController(
+      vsync: this,
+      duration: _insertionDuration,
+      value: 1,
+    )..addStatusListener(_handleInsertionStatus);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimelineSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.items.length == oldWidget.items.length + 1) {
+      _insertingIndex = widget.items.length - 1;
+      _insertionController.forward(from: 0);
+    } else if (widget.items.length < oldWidget.items.length) {
+      _insertingIndex = null;
+      _insertionController.value = 1;
+    }
+  }
+
+  void _handleInsertionStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || _insertingIndex == null) return;
+
+    setState(() {
+      _insertingIndex = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _insertionController
+      ..removeStatusListener(_handleInsertionStatus)
+      ..dispose();
+    super.dispose();
+  }
+
+  double _interval(double value, double start, double end) {
+    return ((value - start) / (end - start)).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _insertionController,
+      builder: (context, _) {
+        final items = widget.items;
+        final insertionProgress = _insertionController.value;
+        final hasInsertion = _insertingIndex != null;
+        final railProgress = hasInsertion
+            ? Curves.easeInOutCubic.transform(
+                _interval(insertionProgress, 0.28, 0.72),
+              )
+            : 1.0;
+        final completedSteps = items.length - (hasInsertion ? 1 : 0);
+        final visibleRailSteps = hasInsertion
+            ? completedSteps + railProgress
+            : items.length.toDouble();
+        final railHeight = _baseRailHeight + _stepRailHeight * visibleRailSteps;
+        final positionReveal = hasInsertion
+            ? Curves.easeOut.transform(_interval(insertionProgress, 0.34, 0.64))
+            : 1.0;
+        final placeholderReveal = hasInsertion
+            ? Curves.easeOutCubic.transform(
+                _interval(insertionProgress, 0.45, 0.78),
+              )
+            : 1.0;
+        final firstPosition = items.isEmpty
+            ? widget.requiredNextPosition
+            : items.first.startPosition;
+
+        return Stack(
           children: [
-            _TimelinePositionNode(value: firstPosition),
-            const SizedBox(height: 6),
-            for (var index = 0; index < items.length; index++) ...[
-              _TimelineAnimationTile(
-                index: index,
-                item: items[index],
-                onRemove: () => onRemoveAt(index),
-                onTap: () => onItemTap(items[index]),
-                resolvePreviewPath: resolvePreviewPath,
-                resolveCachedPreviewPath: resolveCachedPreviewPath,
+            Positioned(
+              left: 13.5,
+              top: 14,
+              child: Container(
+                width: 1,
+                height: railHeight,
+                color: Colors.white.withOpacity(0.14),
               ),
-              const SizedBox(height: 6),
-              _TimelinePositionNode(value: items[index].endPosition),
-              const SizedBox(height: 6),
-            ],
-            _AddTimelineStep(
-              key: addStepKey,
-              flightTargetKey: addStepFlightTargetKey,
-              index: items.length,
-              requiredPosition: requiredNextPosition,
-              isFirstStep: items.isEmpty,
-              onTap: onAddStep,
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TimelinePositionNode(value: firstPosition),
+                const SizedBox(height: 6),
+                for (var index = 0; index < items.length; index++) ...[
+                  _TimelineAnimationTile(
+                    index: index,
+                    item: items[index],
+                    insertionProgress: index == _insertingIndex
+                        ? insertionProgress
+                        : 1,
+                    onRemove: () => widget.onRemoveAt(index),
+                    onTap: () => widget.onItemTap(items[index]),
+                    resolvePreviewPath: widget.resolvePreviewPath,
+                    resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
+                  ),
+                  const SizedBox(height: 6),
+                  _AnimatedTimelinePositionNode(
+                    value: items[index].endPosition,
+                    progress: index == _insertingIndex ? positionReveal : 1,
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                _AddTimelineStep(
+                  key: widget.addStepKey,
+                  flightTargetKey: widget.addStepFlightTargetKey,
+                  index: items.length,
+                  requiredPosition: widget.requiredNextPosition,
+                  isFirstStep: items.isEmpty,
+                  revealProgress: placeholderReveal,
+                  onTap: widget.onAddStep,
+                ),
+              ],
             ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -600,6 +784,7 @@ class _AddTimelineStep extends StatelessWidget {
     required this.index,
     required this.requiredPosition,
     required this.isFirstStep,
+    this.revealProgress = 1,
     required this.onTap,
   });
 
@@ -607,78 +792,113 @@ class _AddTimelineStep extends StatelessWidget {
   final int index;
   final String requiredPosition;
   final bool isFirstStep;
+  final double revealProgress;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _StepNumber(index: index, isPending: true),
+        Opacity(
+          opacity: revealProgress,
+          child: Transform.scale(
+            scale: 0.7 + 0.3 * revealProgress,
+            child: _StepNumber(index: index, isPending: true),
+          ),
+        ),
         const SizedBox(width: 10),
         Expanded(
-          child: Material(
-            color: Colors.white.withOpacity(0.035),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(color: Colors.white.withOpacity(0.10)),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Container(
-                      key: flightTargetKey,
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF8F55FF).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: const Color(0xFFC8A7FF).withOpacity(0.38),
+          child: IgnorePointer(
+            ignoring: revealProgress < 0.95,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final fullWidth = constraints.maxWidth;
+
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: fullWidth * revealProgress,
+                    height: 96,
+                    child: Material(
+                      color: Colors.white.withOpacity(0.035),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: Colors.white.withOpacity(0.10)),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        minWidth: fullWidth,
+                        maxWidth: fullWidth,
+                        minHeight: 96,
+                        maxHeight: 96,
+                        child: InkWell(
+                          onTap: onTap,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                Container(
+                                  key: flightTargetKey,
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF8F55FF,
+                                    ).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(
+                                        0xFFC8A7FF,
+                                      ).withOpacity(0.38),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_rounded,
+                                    size: 34,
+                                    color: Color(0xFFC8A7FF),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        isFirstStep
+                                            ? 'Add first animation'
+                                            : 'Add next animation',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        requiredPosition == 'Any'
+                                            ? 'Any start position'
+                                            : 'Required start: $requiredPosition',
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.60),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      child: const Icon(
-                        Icons.add_rounded,
-                        size: 34,
-                        color: Color(0xFFC8A7FF),
-                      ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            isFirstStep
-                                ? 'Add first animation'
-                                : 'Add next animation',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            requiredPosition == 'Any'
-                                ? 'Any start position'
-                                : 'Required start: $requiredPosition',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.60),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -691,6 +911,7 @@ class _TimelineAnimationTile extends StatelessWidget {
   const _TimelineAnimationTile({
     required this.index,
     required this.item,
+    this.insertionProgress = 1,
     required this.onRemove,
     required this.onTap,
     required this.resolvePreviewPath,
@@ -699,6 +920,7 @@ class _TimelineAnimationTile extends StatelessWidget {
 
   final int index;
   final AnimationLibraryItem item;
+  final double insertionProgress;
   final VoidCallback onRemove;
   final VoidCallback onTap;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
@@ -706,6 +928,20 @@ class _TimelineAnimationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final previewProgress = Curves.easeOut.transform(
+      ((insertionProgress - 0.02) / 0.46).clamp(0.0, 1.0),
+    );
+    final previewScale = switch (previewProgress) {
+      < 0.38 => 0.45 + (1.12 - 0.45) * (previewProgress / 0.38),
+      < 0.68 => 1.12 - 0.16 * ((previewProgress - 0.38) / 0.30),
+      _ => 0.96 + 0.04 * ((previewProgress - 0.68) / 0.32),
+    };
+    final previewRotation =
+        math.sin(previewProgress * math.pi * 3) * (1 - previewProgress) * 0.055;
+    final textProgress = Curves.easeOutCubic.transform(
+      ((insertionProgress - 0.14) / 0.38).clamp(0.0, 1.0),
+    );
+
     return Row(
       children: [
         _StepNumber(index: index),
@@ -724,48 +960,68 @@ class _TimelineAnimationTile extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        width: 72,
-                        height: 72,
-                        child: AnimationPreviewFrame(
-                          previewPath: item.previewPath,
-                          resolvePreviewPath: resolvePreviewPath,
-                          resolveCachedPreviewPath: resolveCachedPreviewPath,
+                    Transform.rotate(
+                      angle: previewRotation,
+                      child: Transform.scale(
+                        scale: previewScale,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(
+                            width: 72,
+                            height: 72,
+                            child: AnimationPreviewFrame(
+                              previewPath: item.previewPath,
+                              resolvePreviewPath: resolvePreviewPath,
+                              resolveCachedPreviewPath:
+                                  resolveCachedPreviewPath,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                      child: ClipRect(
+                        child: Opacity(
+                          opacity: textProgress,
+                          child: Transform.translate(
+                            offset: Offset(-36 * (1 - textProgress), 0),
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.animationName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.56),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            item.animationName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.56),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    IconButton(
-                      onPressed: onRemove,
-                      icon: const Icon(Icons.delete_outline),
+                    Opacity(
+                      opacity: textProgress,
+                      child: IconButton(
+                        onPressed: onRemove,
+                        icon: const Icon(Icons.delete_outline),
+                      ),
                     ),
                   ],
                 ),
@@ -811,6 +1067,27 @@ class _StepNumber extends StatelessWidget {
           fontSize: 13,
           fontWeight: FontWeight.w800,
         ),
+      ),
+    );
+  }
+}
+
+class _AnimatedTimelinePositionNode extends StatelessWidget {
+  const _AnimatedTimelinePositionNode({
+    required this.value,
+    required this.progress,
+  });
+
+  final String value;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: progress,
+      child: Transform.translate(
+        offset: Offset(0, -8 * (1 - progress)),
+        child: _TimelinePositionNode(value: value),
       ),
     );
   }

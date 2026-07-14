@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
@@ -8,6 +9,7 @@ import 'library_search_screen.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card.dart';
 import '../widgets/animation/animation_card_flight.dart';
+import '../widgets/animation/animation_preview_frame.dart';
 
 class FullLibraryScreen extends StatefulWidget {
   const FullLibraryScreen({
@@ -24,6 +26,8 @@ class FullLibraryScreen extends StatefulWidget {
 }
 
 class _FullLibraryScreenState extends State<FullLibraryScreen> {
+  static const _arrivalHapticDelay = Duration(milliseconds: 90);
+
   @override
   void initState() {
     super.initState();
@@ -51,12 +55,10 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
-          : (sourceKey) => AnimationCardFlight.run(
-              sourceKey: sourceKey,
-              targetKey: widget.sequenceBuilderNavKey,
-              finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+          : (sourceKey) => _animateAndAdd(
+              sourceKey,
+              entry,
               flightSize: const Size.square(AnimationCard.compactExtent),
-              action: () => _handlePrimaryAction(entry),
             ),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
@@ -71,6 +73,37 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
       );
     }
+  }
+
+  Future<void> _animateAndAdd(
+    GlobalKey sourceKey,
+    LibraryDisplayItem entry, {
+    Size? flightSize,
+  }) async {
+    unawaited(HapticFeedback.lightImpact());
+
+    final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
+      entry.item.previewPath,
+    );
+
+    await AnimationCardFlight.run(
+      sourceKey: sourceKey,
+      targetKey: widget.sequenceBuilderNavKey,
+      finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+      flightSize: flightSize ?? const Size.square(AnimationCard.compactExtent),
+      fadeOut: false,
+      flightChild: AnimationPreviewFrame(
+        previewPath: cachedPreviewPath ?? entry.item.previewPath,
+        resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+        resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      ),
+      actionTiming: AnimationFlightActionTiming.afterFlight,
+      action: () async {
+        await _handlePrimaryAction(entry);
+        await Future<void>.delayed(_arrivalHapticDelay);
+        await HapticFeedback.heavyImpact();
+      },
+    );
   }
 
   @override
@@ -117,12 +150,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                     return _handlePrimaryAction(entry);
                   }
 
-                  return AnimationCardFlight.run(
-                    sourceKey: flightKey,
-                    targetKey: widget.sequenceBuilderNavKey,
-                    finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-                    action: () => _handlePrimaryAction(entry),
-                  );
+                  return _animateAndAdd(flightKey, entry);
                 },
               );
             },
