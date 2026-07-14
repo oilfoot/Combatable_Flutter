@@ -26,8 +26,18 @@ class SequenceBuilderScreen extends StatefulWidget {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   late final TextEditingController _sequenceNameController;
+  final ScrollController _timelineScrollController = ScrollController();
+  final GlobalKey _timelineViewportKey = GlobalKey(
+    debugLabel: 'sequence-timeline-viewport',
+  );
   final GlobalKey _timelineTargetKey = GlobalKey(
     debugLabel: 'sequence-timeline-flight-target',
+  );
+  final GlobalKey _addStepTargetKey = GlobalKey(
+    debugLabel: 'sequence-add-step-target',
+  );
+  final GlobalKey _addStepFlightTargetKey = GlobalKey(
+    debugLabel: 'sequence-add-step-flight-target',
   );
   final GlobalKey _libraryPanelKey = GlobalKey(
     debugLabel: 'sequence-library-panel',
@@ -55,6 +65,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     widget.sequenceController.removeListener(_onControllerChanged);
     widget.libraryController.removeListener(_onControllerChanged);
     _sequenceNameController.dispose();
+    _timelineScrollController.dispose();
     super.dispose();
   }
 
@@ -93,6 +104,20 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       onPrimaryAction: () async {
         await _handlePrimaryAction(entry);
       },
+    );
+  }
+
+  Future<void> _showTimelineAnimationInfo(AnimationLibraryItem item) async {
+    await AnimationInfoSheet.show(
+      context,
+      item: item,
+      isDownloaded: true,
+      isDownloading: false,
+      buttonText: 'Add',
+      showPrimaryAction: false,
+      resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+      resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      onPrimaryAction: () async {},
     );
   }
 
@@ -156,6 +181,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                         SequenceBuilderLibraryPanelState.fullyCollapsed,
                       ),
                       child: SingleChildScrollView(
+                        key: _timelineViewportKey,
+                        controller: _timelineScrollController,
                         padding: EdgeInsets.fromLTRB(
                           16,
                           14,
@@ -206,7 +233,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                               items: sequence.selectedAnimations,
                               requiredNextPosition: _requiredNextPosition,
                               onRemoveAt: sequence.removeAnimationAt,
+                              onItemTap: _showTimelineAnimationInfo,
                               onAddStep: _expandLibrary,
+                              addStepKey: _addStepTargetKey,
+                              addStepFlightTargetKey: _addStepFlightTargetKey,
                               resolvePreviewPath:
                                   widget.libraryController.getOrDownloadPreview,
                               resolveCachedPreviewPath:
@@ -268,20 +298,103 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _setLibraryPanelState(SequenceBuilderLibraryPanelState.expanded);
   }
 
+  ({Future<void> scrolling, Offset? flightTarget}) _prepareAddStepFlight() {
+    final flightTargetBox =
+        _addStepFlightTargetKey.currentContext?.findRenderObject()
+            as RenderBox?;
+    final currentFlightTarget = flightTargetBox?.localToGlobal(
+      Offset(flightTargetBox.size.width / 2, flightTargetBox.size.height / 2),
+    );
+
+    if (!_timelineScrollController.hasClients) {
+      return (
+        scrolling: Future<void>.value(),
+        flightTarget: currentFlightTarget,
+      );
+    }
+
+    final addStepBox =
+        _addStepTargetKey.currentContext?.findRenderObject() as RenderBox?;
+    final viewportBox =
+        _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    final panelBox =
+        _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (addStepBox == null || viewportBox == null || panelBox == null) {
+      return (
+        scrolling: Future<void>.value(),
+        flightTarget: currentFlightTarget,
+      );
+    }
+
+    final addStepTop = addStepBox.localToGlobal(Offset.zero).dy;
+    final addStepBottom = addStepBox
+        .localToGlobal(Offset(0, addStepBox.size.height))
+        .dy;
+    final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
+    final viewportBottom = viewportBox
+        .localToGlobal(Offset(0, viewportBox.size.height))
+        .dy;
+    final panelTop = panelBox.localToGlobal(Offset.zero).dy;
+    final visibleTop = viewportTop + 12;
+    final visibleBottom = panelTop > visibleTop
+        ? panelTop - 12
+        : viewportBottom - 12;
+
+    double scrollDelta;
+    if (addStepTop < visibleTop) {
+      scrollDelta = addStepTop - visibleTop;
+    } else if (addStepBottom > visibleBottom) {
+      scrollDelta = addStepBottom - visibleBottom;
+    } else {
+      return (
+        scrolling: Future<void>.value(),
+        flightTarget: currentFlightTarget,
+      );
+    }
+
+    final position = _timelineScrollController.position;
+    final targetOffset = (_timelineScrollController.offset + scrollDelta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+
+    final actualScrollDelta = targetOffset - _timelineScrollController.offset;
+    final projectedFlightTarget = currentFlightTarget == null
+        ? null
+        : currentFlightTarget - Offset(0, actualScrollDelta);
+    final scrolling = _timelineScrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+
+    return (scrolling: scrolling, flightTarget: projectedFlightTarget);
+  }
+
   Future<void> _animateAndAdd(
     GlobalKey sourceKey,
     LibraryDisplayItem entry, {
     Size? flightSize,
-  }) {
+  }) async {
     if (widget.libraryController.requiresDownload(entry)) {
-      return _handlePrimaryAction(entry);
+      await _handlePrimaryAction(entry);
+      return;
     }
 
-    return AnimationCardFlight.run(
+    final addStepFlight = _prepareAddStepFlight();
+    final flightTarget = addStepFlight.flightTarget;
+    final flight = AnimationCardFlight.run(
       sourceKey: sourceKey,
-      targetKey: _isLibraryExpanded ? null : _timelineTargetKey,
+      targetKey: flightTarget == null && !_isLibraryExpanded
+          ? _timelineTargetKey
+          : null,
       behindPanelKey: _isLibraryExpanded ? _libraryPanelKey : null,
-      destination: _isLibraryExpanded ? _expandedPanelDestination : null,
+      destination: flightTarget != null
+          ? (_) => flightTarget
+          : _isLibraryExpanded
+          ? _expandedPanelDestination
+          : null,
       finalScale: _isLibraryExpanded
           ? AnimationCardFlightTuning.expandedBuilderFinalScale
           : AnimationCardFlightTuning.collapsedBuilderFinalScale,
@@ -289,6 +402,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       actionTiming: AnimationFlightActionTiming.afterFlight,
       action: () => _handlePrimaryAction(entry),
     );
+
+    await Future.wait<void>([addStepFlight.scrolling, flight]);
   }
 
   Offset _expandedPanelDestination(Rect sourceRect) {
@@ -413,7 +528,10 @@ class _TimelineSection extends StatelessWidget {
     required this.items,
     required this.requiredNextPosition,
     required this.onRemoveAt,
+    required this.onItemTap,
     required this.onAddStep,
+    required this.addStepKey,
+    required this.addStepFlightTargetKey,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
   });
@@ -421,7 +539,10 @@ class _TimelineSection extends StatelessWidget {
   final List<AnimationLibraryItem> items;
   final String requiredNextPosition;
   final void Function(int index) onRemoveAt;
+  final ValueChanged<AnimationLibraryItem> onItemTap;
   final VoidCallback onAddStep;
+  final Key addStepKey;
+  final Key addStepFlightTargetKey;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
@@ -449,6 +570,7 @@ class _TimelineSection extends StatelessWidget {
                 index: index,
                 item: items[index],
                 onRemove: () => onRemoveAt(index),
+                onTap: () => onItemTap(items[index]),
                 resolvePreviewPath: resolvePreviewPath,
                 resolveCachedPreviewPath: resolveCachedPreviewPath,
               ),
@@ -457,6 +579,8 @@ class _TimelineSection extends StatelessWidget {
               const SizedBox(height: 6),
             ],
             _AddTimelineStep(
+              key: addStepKey,
+              flightTargetKey: addStepFlightTargetKey,
               index: items.length,
               requiredPosition: requiredNextPosition,
               isFirstStep: items.isEmpty,
@@ -471,12 +595,15 @@ class _TimelineSection extends StatelessWidget {
 
 class _AddTimelineStep extends StatelessWidget {
   const _AddTimelineStep({
+    super.key,
+    required this.flightTargetKey,
     required this.index,
     required this.requiredPosition,
     required this.isFirstStep,
     required this.onTap,
   });
 
+  final Key flightTargetKey;
   final int index;
   final String requiredPosition;
   final bool isFirstStep;
@@ -503,6 +630,7 @@ class _AddTimelineStep extends StatelessWidget {
                 child: Row(
                   children: [
                     Container(
+                      key: flightTargetKey,
                       width: 72,
                       height: 72,
                       decoration: BoxDecoration(
@@ -564,6 +692,7 @@ class _TimelineAnimationTile extends StatelessWidget {
     required this.index,
     required this.item,
     required this.onRemove,
+    required this.onTap,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
   });
@@ -571,6 +700,7 @@ class _TimelineAnimationTile extends StatelessWidget {
   final int index;
   final AnimationLibraryItem item;
   final VoidCallback onRemove;
+  final VoidCallback onTap;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
@@ -581,59 +711,65 @@ class _TimelineAnimationTile extends StatelessWidget {
         _StepNumber(index: index),
         const SizedBox(width: 10),
         Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+          child: Material(
+            color: Colors.white.withOpacity(0.06),
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withOpacity(0.09)),
+              side: BorderSide(color: Colors.white.withOpacity(0.09)),
             ),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SizedBox(
-                    width: 72,
-                    height: 72,
-                    child: AnimationPreviewFrame(
-                      previewPath: item.previewPath,
-                      resolvePreviewPath: resolvePreviewPath,
-                      resolveCachedPreviewPath: resolveCachedPreviewPath,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: AnimationPreviewFrame(
+                          previewPath: item.previewPath,
+                          resolvePreviewPath: resolvePreviewPath,
+                          resolveCachedPreviewPath: resolveCachedPreviewPath,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.animationName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.56),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.animationName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.56),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                    IconButton(
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.delete_outline),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
+              ),
             ),
           ),
         ),

@@ -13,6 +13,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required this.isDownloading,
     required this.buttonText,
     required this.onPrimaryAction,
+    this.showPrimaryAction = true,
     this.onAnimatedPrimaryAction,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
@@ -23,6 +24,7 @@ class AnimationInfoSheet extends StatelessWidget {
   final bool isDownloading;
   final String buttonText;
   final Future<void> Function() onPrimaryAction;
+  final bool showPrimaryAction;
   final Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
@@ -34,6 +36,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required bool isDownloading,
     required String buttonText,
     required Future<void> Function() onPrimaryAction,
+    bool showPrimaryAction = true,
     Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction,
     Future<String?> Function(String? previewPath)? resolvePreviewPath,
     String? Function(String? previewPath)? resolveCachedPreviewPath,
@@ -50,6 +53,7 @@ class AnimationInfoSheet extends StatelessWidget {
           isDownloading: isDownloading,
           buttonText: buttonText,
           onPrimaryAction: onPrimaryAction,
+          showPrimaryAction: showPrimaryAction,
           onAnimatedPrimaryAction: onAnimatedPrimaryAction,
           resolvePreviewPath: resolvePreviewPath,
           resolveCachedPreviewPath: resolveCachedPreviewPath,
@@ -154,43 +158,47 @@ class AnimationInfoSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 28),
-                      RepaintBoundary(
-                        key: primaryActionKey,
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: isDownloading
-                                ? null
-                                : () async {
-                                    final animatedAction =
-                                        onAnimatedPrimaryAction;
+                      if (showPrimaryAction) ...[
+                        RepaintBoundary(
+                          key: primaryActionKey,
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: isDownloading
+                                  ? null
+                                  : () async {
+                                      final animatedAction =
+                                          onAnimatedPrimaryAction;
 
-                                    if (animatedAction == null) {
-                                      await onPrimaryAction();
+                                      if (animatedAction == null) {
+                                        await onPrimaryAction();
+                                        if (context.mounted) {
+                                          Navigator.of(context).pop();
+                                        }
+                                        return;
+                                      }
+
+                                      final flight = animatedAction(
+                                        primaryActionKey,
+                                      );
+
                                       if (context.mounted) {
                                         Navigator.of(context).pop();
                                       }
-                                      return;
-                                    }
 
-                                    final flight = animatedAction(
-                                      primaryActionKey,
-                                    );
-
-                                    if (context.mounted) {
-                                      Navigator.of(context).pop();
-                                    }
-
-                                    unawaited(flight);
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                                      unawaited(flight);
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                              ),
+                              child: Text(buttonText),
                             ),
-                            child: Text(buttonText),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
