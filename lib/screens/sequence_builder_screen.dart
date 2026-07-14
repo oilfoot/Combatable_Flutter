@@ -32,7 +32,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   final GlobalKey _libraryPanelKey = GlobalKey(
     debugLabel: 'sequence-library-panel',
   );
-  bool _isLibraryExpanded = false;
+  SequenceBuilderLibraryPanelState _libraryPanelState =
+      SequenceBuilderLibraryPanelState.fullyCollapsed;
+
+  bool get _isLibraryExpanded =>
+      _libraryPanelState == SequenceBuilderLibraryPanelState.expanded;
 
   @override
   void initState() {
@@ -127,7 +131,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
-    const timelineBottomPadding = SequenceBuilderLibrary.collapsedHeight + 16;
+    final timelineBottomPadding =
+        _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
+        ? SequenceBuilderLibrary.fullyCollapsedHeight + 16
+        : SequenceBuilderLibrary.collapsedHeight + 16;
 
     return Scaffold(
       body: SafeArea(
@@ -143,64 +150,70 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     onBuildUnitySequence: widget.onBuildUnitySequence,
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(
-                        16,
-                        14,
-                        16,
-                        timelineBottomPadding,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => _setLibraryPanelState(
+                        SequenceBuilderLibraryPanelState.fullyCollapsed,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            height: 40,
-                            child: Row(
-                              children: [
-                                const Text(
-                                  'Timeline',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Visibility(
-                                  visible:
-                                      sequence.selectedAnimations.isNotEmpty,
-                                  maintainAnimation: true,
-                                  maintainSize: true,
-                                  maintainState: true,
-                                  child: TextButton.icon(
-                                    onPressed: sequence.clearAnimations,
-                                    icon: const Icon(Icons.refresh, size: 18),
-                                    label: const Text('Clear All'),
-                                    style: TextButton.styleFrom(
-                                      minimumSize: const Size(0, 36),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          14,
+                          16,
+                          timelineBottomPadding,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              height: 40,
+                              child: Row(
+                                children: [
+                                  const Text(
+                                    'Timeline',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const Spacer(),
+                                  Visibility(
+                                    visible:
+                                        sequence.selectedAnimations.isNotEmpty,
+                                    maintainAnimation: true,
+                                    maintainSize: true,
+                                    maintainState: true,
+                                    child: TextButton.icon(
+                                      onPressed: sequence.clearAnimations,
+                                      icon: const Icon(Icons.refresh, size: 18),
+                                      label: const Text('Clear All'),
+                                      style: TextButton.styleFrom(
+                                        minimumSize: const Size(0, 36),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                        ),
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          _TimelineSection(
-                            key: _timelineTargetKey,
-                            items: sequence.selectedAnimations,
-                            requiredNextPosition: _requiredNextPosition,
-                            onRemoveAt: sequence.removeAnimationAt,
-                            onAddStep: _expandLibrary,
-                            resolvePreviewPath:
-                                widget.libraryController.getOrDownloadPreview,
-                            resolveCachedPreviewPath:
-                                widget.libraryController.getCachedPreviewPath,
-                          ),
-                        ],
+                            const SizedBox(height: 12),
+                            _TimelineSection(
+                              key: _timelineTargetKey,
+                              items: sequence.selectedAnimations,
+                              requiredNextPosition: _requiredNextPosition,
+                              onRemoveAt: sequence.removeAnimationAt,
+                              onAddStep: _expandLibrary,
+                              resolvePreviewPath:
+                                  widget.libraryController.getOrDownloadPreview,
+                              resolveCachedPreviewPath:
+                                  widget.libraryController.getCachedPreviewPath,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -215,7 +228,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                   duration: const Duration(milliseconds: 220),
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: _toggleLibrary,
+                    onTap: () => _setLibraryPanelState(
+                      SequenceBuilderLibraryPanelState.collapsed,
+                    ),
                     child: const ColoredBox(color: Color(0x66000000)),
                   ),
                 ),
@@ -225,8 +240,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               alignment: Alignment.bottomCenter,
               child: SequenceBuilderLibrary(
                 key: _libraryPanelKey,
-                isExpanded: _isLibraryExpanded,
-                onToggleExpanded: _toggleLibrary,
+                panelState: _libraryPanelState,
+                onStateChanged: _setLibraryPanelState,
                 items: _libraryItems,
                 libraryController: widget.libraryController,
                 onItemTap: _showAnimationInfo,
@@ -239,18 +254,18 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     );
   }
 
-  void _toggleLibrary() {
+  void _setLibraryPanelState(SequenceBuilderLibraryPanelState state) {
+    if (_libraryPanelState == state) return;
+
     setState(() {
-      _isLibraryExpanded = !_isLibraryExpanded;
+      _libraryPanelState = state;
     });
   }
 
   void _expandLibrary() {
     if (_isLibraryExpanded) return;
 
-    setState(() {
-      _isLibraryExpanded = true;
-    });
+    _setLibraryPanelState(SequenceBuilderLibraryPanelState.expanded);
   }
 
   Future<void> _animateAndAdd(
@@ -412,40 +427,42 @@ class _TimelineSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final firstPosition = items.isEmpty
+        ? requiredNextPosition
+        : items.first.startPosition;
+
+    return Stack(
       children: [
-        if (items.isNotEmpty) ...[
-          _PositionPill(
-            label: 'Start',
-            value: items.first.startPosition,
-            color: const Color(0xFF45D483),
-          ),
-          const SizedBox(height: 12),
-        ],
-        for (var index = 0; index < items.length; index++) ...[
-          _TimelineAnimationTile(
-            index: index,
-            item: items[index],
-            onRemove: () => onRemoveAt(index),
-            resolvePreviewPath: resolvePreviewPath,
-            resolveCachedPreviewPath: resolveCachedPreviewPath,
-          ),
-          const SizedBox(height: 10),
-          _PositionPill(
-            label: index == items.length - 1 ? 'End' : 'Next',
-            value: items[index].endPosition,
-            color: index == items.length - 1
-                ? const Color(0xFFFF5353)
-                : const Color(0xFFC8A7FF),
-          ),
-          const SizedBox(height: 10),
-        ],
-        _AddTimelineStep(
-          index: items.length,
-          requiredPosition: requiredNextPosition,
-          isFirstStep: items.isEmpty,
-          onTap: onAddStep,
+        Positioned(
+          left: 13.5,
+          top: 14,
+          bottom: 48,
+          child: Container(width: 1, color: Colors.white.withOpacity(0.14)),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TimelinePositionNode(value: firstPosition),
+            const SizedBox(height: 6),
+            for (var index = 0; index < items.length; index++) ...[
+              _TimelineAnimationTile(
+                index: index,
+                item: items[index],
+                onRemove: () => onRemoveAt(index),
+                resolvePreviewPath: resolvePreviewPath,
+                resolveCachedPreviewPath: resolveCachedPreviewPath,
+              ),
+              const SizedBox(height: 6),
+              _TimelinePositionNode(value: items[index].endPosition),
+              const SizedBox(height: 6),
+            ],
+            _AddTimelineStep(
+              index: items.length,
+              requiredPosition: requiredNextPosition,
+              isFirstStep: items.isEmpty,
+              onTap: onAddStep,
+            ),
+          ],
         ),
       ],
     );
@@ -633,6 +650,7 @@ class _StepNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final background = Theme.of(context).scaffoldBackgroundColor;
     final foreground = isPending
         ? const Color(0xFFC8A7FF)
         : Colors.white.withOpacity(0.78);
@@ -643,9 +661,7 @@ class _StepNumber extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isPending
-            ? const Color(0xFF8F55FF).withOpacity(0.12)
-            : Colors.white.withOpacity(0.06),
+        color: background,
         border: Border.all(
           color: isPending
               ? const Color(0xFFC8A7FF).withOpacity(0.38)
@@ -664,45 +680,41 @@ class _StepNumber extends StatelessWidget {
   }
 }
 
-class _PositionPill extends StatelessWidget {
-  const _PositionPill({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
+class _TimelinePositionNode extends StatelessWidget {
+  const _TimelinePositionNode({required this.value});
 
-  final String label;
   final String value;
-  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 50,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            '$label:',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.65),
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 28,
+            child: Center(
+              child: Container(
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFAA8BDD),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFFB9A2DE),
+              fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
           ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: color.withOpacity(0.42)),
-          ),
-          child: Text(
-            value,
-            style: TextStyle(color: color, fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
