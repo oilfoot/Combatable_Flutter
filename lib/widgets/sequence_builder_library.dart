@@ -10,6 +10,7 @@ class SequenceBuilderLibrary extends StatefulWidget {
   const SequenceBuilderLibrary({
     super.key,
     required this.panelState,
+    required this.panelSurfaceKey,
     required this.onStateChanged,
     required this.items,
     required this.libraryController,
@@ -18,6 +19,7 @@ class SequenceBuilderLibrary extends StatefulWidget {
   });
 
   final SequenceBuilderLibraryPanelState panelState;
+  final GlobalKey panelSurfaceKey;
   final ValueChanged<SequenceBuilderLibraryPanelState> onStateChanged;
   final List<LibraryDisplayItem> items;
   final LibraryController libraryController;
@@ -176,6 +178,7 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
       onVerticalDragEnd: (details) => _handleDragEnd(details, expandedHeight),
       onVerticalDragCancel: _handleDragCancel,
       child: AnimatedContainer(
+        key: widget.panelSurfaceKey,
         duration: _dragHeight == null ? _panelAnimationDuration : Duration.zero,
         curve: _panelAnimationCurve,
         height: height,

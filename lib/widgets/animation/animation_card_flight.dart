@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 typedef AnimationFlightDestination = Offset Function(Rect sourceRect);
+typedef AnimationFlightTargetProvider = Offset? Function();
 
 enum AnimationFlightActionTiming { alongsideFlight, afterFlight }
 
@@ -15,10 +16,24 @@ enum AnimationFlightActionTiming { alongsideFlight, afterFlight }
 /// Change these values to adjust the feel without touching the animation code.
 abstract final class AnimationCardFlightTuning {
   static const Duration duration = Duration(milliseconds: 400);
+
+  /// Use the larger centered flight only when the target is this many
+  /// timeline steps below the visible area. Change this to 1, 5, etc.
+  static const double sequenceBuilderLongScrollStepThreshold = 3;
+
+  static const Duration sequenceBuilderDuration = Duration(milliseconds: 460);
+  static const Duration sequenceBuilderLongScrollDuration = Duration(
+    milliseconds: 600,
+  );
   static const bool fadeOutAtEnd = true;
   static const double fadeStart = 0.85;
   static const double arcLift = 72;
+  static const double sequenceBuilderArcLift = 150;
+  static const double sequenceBuilderLongScrollArcLift = 400;
+  static const double sequenceBuilderScaleStart = 0;
+  static const double sequenceBuilderLongScrollScaleStart = 0.35;
   static const double maxRotation = 0.07;
+  static const double minimumUpwardClearance = 12;
 
   /// Keeps bright and dark preview images readable while they are in flight.
   static const double ghostCornerRadius = 14;
@@ -54,6 +69,10 @@ class AnimationCardFlight {
     double finalScale = 0.22,
     bool useSnapshot = false,
     bool? fadeOut,
+    bool preventDownwardFlight = false,
+    Duration duration = AnimationCardFlightTuning.duration,
+    double arcLift = AnimationCardFlightTuning.arcLift,
+    double scaleStart = 0,
     Size? flightSize,
     Widget? flightChild,
     AnimationFlightActionTiming actionTiming =
@@ -125,6 +144,14 @@ class AnimationCardFlight {
         overlayBox.globalToLocal(sourceRect.bottomRight),
       );
       final localTargetCenter = overlayBox.globalToLocal(targetCenter);
+      final targetCenterProvider = targetKey == null
+          ? null
+          : () {
+              final globalCenter = _targetCenter(targetKey);
+              return globalCenter == null
+                  ? null
+                  : overlayBox.globalToLocal(globalCenter);
+            };
       final behindPanelRect = _globalRect(behindPanelKey);
       final localBehindTop = behindPanelRect == null
           ? null
@@ -138,9 +165,14 @@ class AnimationCardFlight {
           flightChild: flightChild,
           sourceRect: localSourceRect,
           targetCenter: localTargetCenter,
+          targetCenterProvider: targetCenterProvider,
           finalScale: finalScale,
           behindTop: localBehindTop,
           fadeOut: fadeOut ?? AnimationCardFlightTuning.fadeOutAtEnd,
+          preventDownwardFlight: preventDownwardFlight,
+          duration: duration,
+          arcLift: arcLift,
+          scaleStart: scaleStart,
           onCompleted: () {
             entry.remove();
             cardImage?.dispose();
@@ -183,9 +215,14 @@ class _AnimationCardFlightOverlay extends StatefulWidget {
     required this.flightChild,
     required this.sourceRect,
     required this.targetCenter,
+    required this.targetCenterProvider,
     required this.finalScale,
     required this.behindTop,
     required this.fadeOut,
+    required this.preventDownwardFlight,
+    required this.duration,
+    required this.arcLift,
+    required this.scaleStart,
     required this.onCompleted,
   });
 
@@ -193,9 +230,14 @@ class _AnimationCardFlightOverlay extends StatefulWidget {
   final Widget? flightChild;
   final Rect sourceRect;
   final Offset targetCenter;
+  final AnimationFlightTargetProvider? targetCenterProvider;
   final double finalScale;
   final double? behindTop;
   final bool fadeOut;
+  final bool preventDownwardFlight;
+  final Duration duration;
+  final double arcLift;
+  final double scaleStart;
   final VoidCallback onCompleted;
 
   @override
@@ -212,10 +254,7 @@ class _AnimationCardFlightOverlayState
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: AnimationCardFlightTuning.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _progress = CurvedAnimation(
       parent: _controller,
       curve: const _FastSlowFastCurve(
@@ -239,7 +278,7 @@ class _AnimationCardFlightOverlayState
           animation: _progress,
           builder: (context, _) {
             final t = _progress.value;
-            final scale = ui.lerpDouble(1, widget.finalScale, t) ?? 1;
+            final scale = _scaleAt(t);
             final center = widget.behindTop == null
                 ? _standardCenter(t)
                 : _behindPanelCenter(t);
@@ -299,15 +338,27 @@ class _AnimationCardFlightOverlayState
 
   Offset _standardCenter(double t) {
     final start = widget.sourceRect.center;
-    final end = widget.targetCenter;
+    final liveEnd = widget.targetCenterProvider?.call() ?? widget.targetCenter;
+    final end = widget.preventDownwardFlight
+        ? Offset(
+            liveEnd.dx,
+            math.min(
+              liveEnd.dy,
+              widget.sourceRect.top -
+                  AnimationCardFlightTuning.minimumUpwardClearance,
+            ),
+          )
+        : liveEnd;
     return _quadraticBezier(start, _controlPoint(start, end), end, t);
   }
 
   Offset _behindPanelCenter(double t) {
+    final targetCenter =
+        widget.targetCenterProvider?.call() ?? widget.targetCenter;
     final exitProgress = AnimationCardFlightTuning.behindExitProgress;
-    final exitScale = ui.lerpDouble(1, widget.finalScale, exitProgress) ?? 1;
+    final exitScale = _scaleAt(exitProgress);
     final exitCenter = Offset(
-      widget.targetCenter.dx,
+      targetCenter.dx,
       widget.behindTop! -
           widget.sourceRect.height * exitScale / 2 -
           AnimationCardFlightTuning.behindExitClearance,
@@ -327,13 +378,19 @@ class _AnimationCardFlightOverlayState
     final diveT = Curves.easeInCubic.transform(
       (t - exitProgress) / (1 - exitProgress),
     );
-    return Offset.lerp(exitCenter, widget.targetCenter, diveT) ?? exitCenter;
+    return Offset.lerp(exitCenter, targetCenter, diveT) ?? exitCenter;
+  }
+
+  double _scaleAt(double t) {
+    final scaleProgress = ((t - widget.scaleStart) / (1 - widget.scaleStart))
+        .clamp(0.0, 1.0);
+    return ui.lerpDouble(1, widget.finalScale, scaleProgress) ?? 1;
   }
 
   Offset _controlPoint(Offset start, Offset end) {
     return Offset(
       (start.dx + end.dx) / 2,
-      math.min(start.dy, end.dy) - AnimationCardFlightTuning.arcLift,
+      math.min(start.dy, end.dy) - widget.arcLift,
     );
   }
 

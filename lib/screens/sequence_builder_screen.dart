@@ -12,6 +12,10 @@ import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_preview_frame.dart';
 import '../widgets/sequence_builder_library.dart';
 
+const _timelinePlaceholderRevealDelay = Duration(milliseconds: 324);
+const double _timelinePostRevealBottomClearance = 32;
+const double _timelinePostRevealOverflowThreshold = 4;
+
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
     super.key,
@@ -28,9 +32,41 @@ class SequenceBuilderScreen extends StatefulWidget {
   State<SequenceBuilderScreen> createState() => _SequenceBuilderScreenState();
 }
 
+class _TimelineVisualStep {
+  const _TimelineVisualStep({
+    required this.id,
+    required this.item,
+    required this.animateOnMount,
+    required this.animatePositionOnMount,
+  });
+
+  final int id;
+  final AnimationLibraryItem item;
+  final bool animateOnMount;
+  final bool animatePositionOnMount;
+}
+
+class _TimelinePlaceholderHandle {
+  _TimelinePlaceholderHandle({required this.id, required this.animateOnMount})
+    : containerKey = GlobalKey(debugLabel: 'timeline-placeholder-$id'),
+      flightTargetKey = GlobalKey(debugLabel: 'timeline-flight-target-$id');
+
+  final int id;
+  final bool animateOnMount;
+  final GlobalKey containerKey;
+  final GlobalKey flightTargetKey;
+}
+
+class _PendingTimelineReservation {
+  _PendingTimelineReservation({required this.handle, required this.item});
+
+  final _TimelinePlaceholderHandle handle;
+  final AnimationLibraryItem item;
+  bool hasArrived = false;
+}
+
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   static const _previewPopHapticDelay = Duration(milliseconds: 90);
-  static const _timelineInsertionScrollDelay = Duration(milliseconds: 200);
 
   /// A completed step adds a 96 px tile, two 6 px gaps and a 28 px
   /// position node. Reserve it before insertion so one scroll reveals both
@@ -45,18 +81,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   final GlobalKey _timelineTargetKey = GlobalKey(
     debugLabel: 'sequence-timeline-flight-target',
   );
-  final GlobalKey _addStepTargetKey = GlobalKey(
-    debugLabel: 'sequence-add-step-target',
-  );
-  final GlobalKey _addStepFlightTargetKey = GlobalKey(
-    debugLabel: 'sequence-add-step-flight-target',
-  );
   final GlobalKey _libraryPanelKey = GlobalKey(
     debugLabel: 'sequence-library-panel',
   );
-  // Nullable so adding this state during a hot reload cannot leave an
-  // existing State instance with an uninitialized late field.
-  int? _visuallyCommittedAnimationCount;
+  List<_PendingTimelineReservation>? _pendingTimelineReservationsState;
+  List<_TimelineVisualStep>? _visualTimelineStepsState;
+  _TimelinePlaceholderHandle? _openPlaceholderHandleState;
+  _TimelinePlaceholderHandle? _lastClaimedPlaceholderHandle;
+  int? _nextTimelineSlotIdState;
+  int? _timelineScrollRequestVersionState;
   int _activeVisualAddFlights = 0;
   SequenceBuilderLibraryPanelState _libraryPanelState =
       SequenceBuilderLibraryPanelState.fullyCollapsed;
@@ -71,11 +104,56 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _sequenceNameController = TextEditingController(
       text: widget.sequenceController.sequenceName,
     );
-    _visuallyCommittedAnimationCount =
-        widget.sequenceController.selectedAnimations.length;
+    _nextTimelineSlotIdState = 0;
+    _visualTimelineSteps = widget.sequenceController.selectedAnimations
+        .map(
+          (item) => _TimelineVisualStep(
+            id: _takeTimelineSlotId(),
+            item: item,
+            animateOnMount: false,
+            animatePositionOnMount: false,
+          ),
+        )
+        .toList();
+    _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
+    _lastClaimedPlaceholderHandle = null;
 
     widget.sequenceController.addListener(_onControllerChanged);
     widget.libraryController.addListener(_onControllerChanged);
+  }
+
+  List<_PendingTimelineReservation> get _pendingTimelineReservations =>
+      _pendingTimelineReservationsState ??= [];
+
+  List<_TimelineVisualStep> get _visualTimelineSteps =>
+      _visualTimelineStepsState ??= widget.sequenceController.selectedAnimations
+          .map(
+            (item) => _TimelineVisualStep(
+              id: _takeTimelineSlotId(),
+              item: item,
+              animateOnMount: false,
+              animatePositionOnMount: false,
+            ),
+          )
+          .toList();
+
+  set _visualTimelineSteps(List<_TimelineVisualStep> value) {
+    _visualTimelineStepsState = value;
+  }
+
+  _TimelinePlaceholderHandle get _openPlaceholderHandle =>
+      _openPlaceholderHandleState ??= _newPlaceholderHandle(
+        animateOnMount: false,
+      );
+
+  set _openPlaceholderHandle(_TimelinePlaceholderHandle value) {
+    _openPlaceholderHandleState = value;
+  }
+
+  int _takeTimelineSlotId() {
+    final id = _nextTimelineSlotIdState ?? 0;
+    _nextTimelineSlotIdState = id + 1;
+    return id;
   }
 
   @override
@@ -96,18 +174,69 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       );
     }
 
-    final logicalAnimationCount =
-        widget.sequenceController.selectedAnimations.length;
-    final visuallyCommittedAnimationCount =
-        _visuallyCommittedAnimationCount ?? logicalAnimationCount;
-    if (_activeVisualAddFlights == 0 ||
-        logicalAnimationCount < visuallyCommittedAnimationCount) {
-      _visuallyCommittedAnimationCount = logicalAnimationCount;
+    if (_activeVisualAddFlights == 0 && _pendingTimelineReservations.isEmpty) {
+      _syncVisualTimelineWithController();
     }
 
     if (mounted) {
       setState(() {});
     }
+  }
+
+  _TimelinePlaceholderHandle _newPlaceholderHandle({
+    required bool animateOnMount,
+  }) {
+    return _TimelinePlaceholderHandle(
+      id: _takeTimelineSlotId(),
+      animateOnMount: animateOnMount,
+    );
+  }
+
+  void _syncVisualTimelineWithController() {
+    final logicalAnimations = widget.sequenceController.selectedAnimations;
+    final alreadySynchronized =
+        logicalAnimations.length == _visualTimelineSteps.length &&
+        List.generate(
+          logicalAnimations.length,
+          (index) => identical(
+            logicalAnimations[index],
+            _visualTimelineSteps[index].item,
+          ),
+        ).every((matches) => matches);
+
+    if (alreadySynchronized) return;
+
+    _visualTimelineSteps = logicalAnimations
+        .map(
+          (item) => _TimelineVisualStep(
+            id: _takeTimelineSlotId(),
+            item: item,
+            animateOnMount: false,
+            animatePositionOnMount: false,
+          ),
+        )
+        .toList();
+    _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
+    _lastClaimedPlaceholderHandle = null;
+  }
+
+  void _removeTimelineAnimationAt(int index) {
+    if (index < 0 || index >= _visualTimelineSteps.length) return;
+
+    setState(() {
+      _visualTimelineSteps.removeAt(index);
+    });
+    widget.sequenceController.removeAnimationAt(index);
+  }
+
+  void _clearAllTimelineAnimations() {
+    setState(() {
+      _visualTimelineSteps.clear();
+      _pendingTimelineReservations.clear();
+      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
+      _lastClaimedPlaceholderHandle = null;
+    });
+    widget.sequenceController.clearAnimations();
   }
 
   Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
@@ -181,13 +310,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
-    final logicalAnimations = sequence.selectedAnimations;
-    final visuallyCommittedAnimationCount = _visuallyCommittedAnimationCount ??=
-        logicalAnimations.length;
-    final visibleAnimations = logicalAnimations
-        .take(
-          math.min(visuallyCommittedAnimationCount, logicalAnimations.length),
-        )
+    final visibleAnimations = _visualTimelineSteps
+        .map((step) => step.item)
         .toList(growable: false);
     final timelineBottomPadding =
         _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
@@ -267,7 +391,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                                             key: const ValueKey(
                                               'clear-all-button',
                                             ),
-                                            onPressed: sequence.clearAnimations,
+                                            onPressed:
+                                                _clearAllTimelineAnimations,
                                             icon: const Icon(
                                               Icons.refresh_rounded,
                                               size: 16,
@@ -303,16 +428,16 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                             const SizedBox(height: 12),
                             _TimelineSection(
                               key: _timelineTargetKey,
-                              items: visibleAnimations,
+                              steps: _visualTimelineSteps,
+                              pendingReservations: _pendingTimelineReservations,
+                              openPlaceholderHandle: _openPlaceholderHandle,
                               requiredNextPosition:
                                   _visibleRequiredNextPosition(
                                     visibleAnimations,
                                   ),
-                              onRemoveAt: sequence.removeAnimationAt,
+                              onRemoveAt: _removeTimelineAnimationAt,
                               onItemTap: _showTimelineAnimationInfo,
                               onAddStep: _expandLibrary,
-                              addStepKey: _addStepTargetKey,
-                              addStepFlightTargetKey: _addStepFlightTargetKey,
                               resolvePreviewPath:
                                   widget.libraryController.getOrDownloadPreview,
                               resolveCachedPreviewPath:
@@ -345,8 +470,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: SequenceBuilderLibrary(
-                key: _libraryPanelKey,
                 panelState: _libraryPanelState,
+                panelSurfaceKey: _libraryPanelKey,
                 onStateChanged: _setLibraryPanelState,
                 items: _libraryItems,
                 libraryController: widget.libraryController,
@@ -364,6 +489,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     if (_libraryPanelState == state) return;
 
     setState(() {
+      if (_libraryPanelState == SequenceBuilderLibraryPanelState.expanded &&
+          state != SequenceBuilderLibraryPanelState.expanded) {
+        _syncVisualTimelineWithController();
+      }
       _libraryPanelState = state;
     });
   }
@@ -374,109 +503,42 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _setLibraryPanelState(SequenceBuilderLibraryPanelState.expanded);
   }
 
-  ({Future<void> scrolling, Offset? flightTarget, bool preScrolled})
-  _prepareAddStepFlight() {
+  Offset? _projectLandingTarget({
+    required _TimelinePlaceholderHandle baseHandle,
+    required double slotOffset,
+  }) {
     final flightTargetBox =
-        _addStepFlightTargetKey.currentContext?.findRenderObject()
+        baseHandle.flightTargetKey.currentContext?.findRenderObject()
             as RenderBox?;
-    final currentFlightTarget = flightTargetBox?.localToGlobal(
-      Offset(flightTargetBox.size.width / 2, flightTargetBox.size.height / 2),
-    );
+    return flightTargetBox
+        ?.localToGlobal(
+          Offset(
+            flightTargetBox.size.width / 2,
+            flightTargetBox.size.height / 2,
+          ),
+        )
+        .translate(0, slotOffset);
+  }
 
-    if (!_timelineScrollController.hasClients) {
-      return (
-        scrolling: Future<void>.value(),
-        flightTarget: currentFlightTarget,
-        preScrolled: false,
-      );
-    }
-
+  double _landingOverflowSteps({
+    required _TimelinePlaceholderHandle baseHandle,
+    required double slotOffset,
+  }) {
     final addStepBox =
-        _addStepTargetKey.currentContext?.findRenderObject() as RenderBox?;
+        baseHandle.containerKey.currentContext?.findRenderObject()
+            as RenderBox?;
     final viewportBox =
         _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
     final panelBox =
         _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
 
     if (addStepBox == null || viewportBox == null || panelBox == null) {
-      return (
-        scrolling: Future<void>.value(),
-        flightTarget: currentFlightTarget,
-        preScrolled: false,
-      );
+      return slotOffset / _incomingTimelineStepExtent;
     }
 
-    final addStepTop = addStepBox.localToGlobal(Offset.zero).dy;
-    final addStepBottom = addStepBox
-        .localToGlobal(Offset(0, addStepBox.size.height))
-        .dy;
-    final incomingPlaceholderBottom =
-        addStepBottom + _incomingTimelineStepExtent;
-    final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
-    final viewportBottom = viewportBox
-        .localToGlobal(Offset(0, viewportBox.size.height))
-        .dy;
-    final panelTop = panelBox.localToGlobal(Offset.zero).dy;
-    final visibleTop = viewportTop + 12;
-    final visibleBottom = panelTop > visibleTop
-        ? panelTop - 12
-        : viewportBottom - 12;
-
-    double scrollDelta;
-    if (addStepTop < visibleTop) {
-      scrollDelta = addStepTop - visibleTop;
-    } else if (addStepBottom > visibleBottom) {
-      scrollDelta = incomingPlaceholderBottom - visibleBottom;
-    } else {
-      return (
-        scrolling: Future<void>.value(),
-        flightTarget: currentFlightTarget,
-        preScrolled: false,
-      );
-    }
-
-    final position = _timelineScrollController.position;
-    final targetOffset = (_timelineScrollController.offset + scrollDelta).clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-
-    final actualScrollDelta = targetOffset - _timelineScrollController.offset;
-    final projectedFlightTarget = currentFlightTarget == null
-        ? null
-        : currentFlightTarget - Offset(0, actualScrollDelta);
-    final scrolling = _timelineScrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
-
-    return (
-      scrolling: scrolling,
-      flightTarget: projectedFlightTarget,
-      preScrolled: actualScrollDelta.abs() > 0.5,
-    );
-  }
-
-  Future<void> _scrollWithRevealingPlaceholder() async {
-    await Future<void>.delayed(_timelineInsertionScrollDelay);
-    if (!mounted || !_timelineScrollController.hasClients) return;
-
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted || !_timelineScrollController.hasClients) return;
-
-    final addStepBox =
-        _addStepTargetKey.currentContext?.findRenderObject() as RenderBox?;
-    final viewportBox =
-        _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
-    final panelBox =
-        _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
-
-    if (addStepBox == null || viewportBox == null || panelBox == null) return;
-
-    final addStepBottom = addStepBox
-        .localToGlobal(Offset(0, addStepBox.size.height))
-        .dy;
+    final addStepBottom =
+        addStepBox.localToGlobal(Offset(0, addStepBox.size.height)).dy +
+        slotOffset;
     final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
     final viewportBottom = viewportBox
         .localToGlobal(Offset(0, viewportBox.size.height))
@@ -485,19 +547,119 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     final visibleBottom = panelTop > viewportTop + 12
         ? panelTop - 12
         : viewportBottom - 12;
+    final overflow = math.max(0.0, addStepBottom - visibleBottom);
 
-    if (addStepBottom <= visibleBottom) return;
+    return overflow / _incomingTimelineStepExtent;
+  }
+
+  void _requestTimelineScroll(
+    _TimelinePlaceholderHandle handle, {
+    Duration delay = Duration.zero,
+    bool reserveNextSlot = false,
+    bool isPostRevealScroll = false,
+  }) {
+    final requestVersion = (_timelineScrollRequestVersionState ?? 0) + 1;
+    _timelineScrollRequestVersionState = requestVersion;
+    unawaited(
+      _scrollTimelineToPlaceholder(
+        handle,
+        requestVersion: requestVersion,
+        delay: delay,
+        reserveNextSlot: reserveNextSlot,
+        isPostRevealScroll: isPostRevealScroll,
+      ),
+    );
+  }
+
+  Future<void> _scrollTimelineToPlaceholder(
+    _TimelinePlaceholderHandle handle, {
+    required int requestVersion,
+    required Duration delay,
+    required bool reserveNextSlot,
+    required bool isPostRevealScroll,
+  }) async {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
+    if (!mounted ||
+        requestVersion != _timelineScrollRequestVersionState ||
+        !_timelineScrollController.hasClients) {
+      return;
+    }
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        requestVersion != _timelineScrollRequestVersionState ||
+        !_timelineScrollController.hasClients) {
+      return;
+    }
+
+    final addStepBox =
+        handle.containerKey.currentContext?.findRenderObject() as RenderBox?;
+    final viewportBox =
+        _timelineViewportKey.currentContext?.findRenderObject() as RenderBox?;
+    final panelBox =
+        _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (addStepBox == null || viewportBox == null || panelBox == null) return;
+
+    final addStepTop = addStepBox.localToGlobal(Offset.zero).dy;
+    final addStepBottom = addStepBox
+        .localToGlobal(Offset(0, addStepBox.size.height))
+        .dy;
+    final requiredBottom =
+        addStepBottom + (reserveNextSlot ? _incomingTimelineStepExtent : 0);
+    final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
+    final viewportBottom = viewportBox
+        .localToGlobal(Offset(0, viewportBox.size.height))
+        .dy;
+    final panelTop = panelBox.localToGlobal(Offset.zero).dy;
+    final visibleTop = viewportTop + 12;
+    final occlusionBoundary = panelTop > visibleTop ? panelTop : viewportBottom;
+    if (isPostRevealScroll &&
+        requiredBottom <=
+            occlusionBoundary + _timelinePostRevealOverflowThreshold) {
+      return;
+    }
+    final bottomClearance = isPostRevealScroll
+        ? _timelinePostRevealBottomClearance
+        : 12.0;
+    final visibleBottom = panelTop > visibleTop
+        ? panelTop - bottomClearance
+        : viewportBottom - bottomClearance;
+
+    var scrollDelta = 0.0;
+    if (addStepTop < visibleTop) {
+      scrollDelta = addStepTop - visibleTop;
+    } else if (requiredBottom > visibleBottom) {
+      scrollDelta = requiredBottom - visibleBottom;
+    }
+    if (scrollDelta.abs() < 0.5) return;
 
     final position = _timelineScrollController.position;
-    final targetOffset =
-        (_timelineScrollController.offset + addStepBottom - visibleBottom)
-            .clamp(position.minScrollExtent, position.maxScrollExtent);
-
-    await _timelineScrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeInOutCubic,
+    final targetOffset = (_timelineScrollController.offset + scrollDelta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
     );
+
+    final distance = (targetOffset - _timelineScrollController.offset).abs();
+    final duration = Duration(
+      milliseconds: isPostRevealScroll
+          ? (150 + distance * 0.22).clamp(180, 260).round()
+          : (260 + distance * 0.38).clamp(300, 420).round(),
+    );
+
+    try {
+      await _timelineScrollController.animateTo(
+        targetOffset,
+        duration: duration,
+        curve: isPostRevealScroll
+            ? Curves.easeInOutCubic
+            : Curves.easeInOutSine,
+      );
+    } catch (_) {
+      // A newer landing target intentionally interrupts the current scroll.
+    }
   }
 
   Future<void> _animateAndAdd(
@@ -512,8 +674,45 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
     unawaited(HapticFeedback.lightImpact());
 
-    final addStepFlight = _prepareAddStepFlight();
-    final flightTarget = addStepFlight.flightTarget;
+    if (_isLibraryExpanded) {
+      await _animateAndAddFromExpandedLibrary(
+        sourceKey,
+        entry,
+        flightSize: flightSize,
+      );
+      return;
+    }
+
+    final landingHandle = _openPlaceholderHandle;
+    final openPlaceholderIsRendered =
+        landingHandle.containerKey.currentContext != null;
+    final needsProjectedLandingSlot =
+        _pendingTimelineReservations.isNotEmpty ||
+        (!openPlaceholderIsRendered && _lastClaimedPlaceholderHandle != null);
+    final baseHandle = _pendingTimelineReservations.isNotEmpty
+        ? _pendingTimelineReservations.last.handle
+        : openPlaceholderIsRendered
+        ? landingHandle
+        : _lastClaimedPlaceholderHandle ?? landingHandle;
+    final slotOffset = needsProjectedLandingSlot
+        ? _incomingTimelineStepExtent
+        : 0.0;
+    final reservation = _PendingTimelineReservation(
+      handle: landingHandle,
+      item: entry.item,
+    );
+    final flightTarget = _projectLandingTarget(
+      baseHandle: baseHandle,
+      slotOffset: slotOffset,
+    );
+    final landingOverflowSteps = _landingOverflowSteps(
+      baseHandle: baseHandle,
+      slotOffset: slotOffset,
+    );
+    final landingNeedsPreScroll = landingOverflowSteps > 0;
+    final usesLongScrollFlight =
+        landingOverflowSteps >=
+        AnimationCardFlightTuning.sequenceBuilderLongScrollStepThreshold;
     var animationWasAdded = false;
     _activeVisualAddFlights++;
     final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
@@ -522,9 +721,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     try {
       final flight = AnimationCardFlight.run(
         sourceKey: sourceKey,
-        targetKey: flightTarget == null && !_isLibraryExpanded
-            ? _timelineTargetKey
-            : null,
+        targetKey: landingHandle.flightTargetKey,
         behindPanelKey: _isLibraryExpanded ? _libraryPanelKey : null,
         destination: flightTarget != null
             ? (_) => flightTarget
@@ -536,6 +733,16 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
             : AnimationCardFlightTuning.collapsedBuilderFinalScale,
         flightSize: flightSize,
         fadeOut: false,
+        preventDownwardFlight: !_isLibraryExpanded,
+        duration: usesLongScrollFlight
+            ? AnimationCardFlightTuning.sequenceBuilderLongScrollDuration
+            : AnimationCardFlightTuning.sequenceBuilderDuration,
+        arcLift: usesLongScrollFlight
+            ? AnimationCardFlightTuning.sequenceBuilderLongScrollArcLift
+            : AnimationCardFlightTuning.sequenceBuilderArcLift,
+        scaleStart: usesLongScrollFlight
+            ? AnimationCardFlightTuning.sequenceBuilderLongScrollScaleStart
+            : AnimationCardFlightTuning.sequenceBuilderScaleStart,
         flightChild: AnimationPreviewFrame(
           previewPath: cachedPreviewPath ?? entry.item.previewPath,
           resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
@@ -550,27 +757,91 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           animationWasAdded =
               widget.sequenceController.selectedAnimations.length >
               itemCountBefore;
+
+          if (animationWasAdded && mounted) {
+            setState(() {
+              _pendingTimelineReservations.add(reservation);
+              _lastClaimedPlaceholderHandle = reservation.handle;
+              _openPlaceholderHandle = _newPlaceholderHandle(
+                animateOnMount: true,
+              );
+            });
+            if (landingNeedsPreScroll) {
+              _requestTimelineScroll(landingHandle, reserveNextSlot: true);
+            }
+          }
         },
       );
 
-      await Future.wait<void>([addStepFlight.scrolling, flight]);
+      await flight;
 
       if (animationWasAdded && mounted) {
+        late final _TimelinePlaceholderHandle scrollTarget;
+        late final bool revealsFinalPlaceholder;
         setState(() {
-          final visuallyCommittedAnimationCount =
-              _visuallyCommittedAnimationCount ?? 0;
-          _visuallyCommittedAnimationCount = math.min(
-            visuallyCommittedAnimationCount + 1,
-            widget.sequenceController.selectedAnimations.length,
-          );
+          reservation.hasArrived = true;
+
+          while (_pendingTimelineReservations.isNotEmpty &&
+              _pendingTimelineReservations.first.hasArrived) {
+            final arrivedReservation = _pendingTimelineReservations.removeAt(0);
+            _visualTimelineSteps.add(
+              _TimelineVisualStep(
+                id: arrivedReservation.handle.id,
+                item: arrivedReservation.item,
+                animateOnMount: true,
+                animatePositionOnMount: _pendingTimelineReservations.isEmpty,
+              ),
+            );
+          }
+
+          scrollTarget = _pendingTimelineReservations.isEmpty
+              ? _openPlaceholderHandle
+              : _pendingTimelineReservations.last.handle;
+          revealsFinalPlaceholder = _pendingTimelineReservations.isEmpty;
         });
 
-        if (!addStepFlight.preScrolled) {
-          unawaited(_scrollWithRevealingPlaceholder());
+        if (!landingNeedsPreScroll && revealsFinalPlaceholder) {
+          _requestTimelineScroll(
+            scrollTarget,
+            delay: _timelinePlaceholderRevealDelay,
+            isPostRevealScroll: true,
+          );
         }
         await Future<void>.delayed(_previewPopHapticDelay);
         await HapticFeedback.heavyImpact();
       }
+    } finally {
+      _activeVisualAddFlights--;
+    }
+  }
+
+  Future<void> _animateAndAddFromExpandedLibrary(
+    GlobalKey sourceKey,
+    LibraryDisplayItem entry, {
+    Size? flightSize,
+  }) async {
+    _activeVisualAddFlights++;
+    final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
+      entry.item.previewPath,
+    );
+
+    try {
+      await AnimationCardFlight.run(
+        sourceKey: sourceKey,
+        behindPanelKey: _libraryPanelKey,
+        destination: _expandedPanelDestination,
+        finalScale: AnimationCardFlightTuning.expandedBuilderFinalScale,
+        flightSize: flightSize,
+        fadeOut: false,
+        flightChild: AnimationPreviewFrame(
+          previewPath: cachedPreviewPath ?? entry.item.previewPath,
+          resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+          resolveCachedPreviewPath:
+              widget.libraryController.getCachedPreviewPath,
+        ),
+        actionTiming: AnimationFlightActionTiming.alongsideFlight,
+        action: () => _handlePrimaryAction(entry),
+      );
     } finally {
       _activeVisualAddFlights--;
     }
@@ -695,24 +966,24 @@ class _SequenceHeader extends StatelessWidget {
 class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
     super.key,
-    required this.items,
+    required this.steps,
+    required this.pendingReservations,
+    required this.openPlaceholderHandle,
     required this.requiredNextPosition,
     required this.onRemoveAt,
     required this.onItemTap,
     required this.onAddStep,
-    required this.addStepKey,
-    required this.addStepFlightTargetKey,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
   });
 
-  final List<AnimationLibraryItem> items;
+  final List<_TimelineVisualStep> steps;
+  final List<_PendingTimelineReservation> pendingReservations;
+  final _TimelinePlaceholderHandle openPlaceholderHandle;
   final String requiredNextPosition;
   final void Function(int index) onRemoveAt;
   final ValueChanged<AnimationLibraryItem> onItemTap;
   final VoidCallback onAddStep;
-  final Key addStepKey;
-  final Key addStepFlightTargetKey;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
@@ -720,51 +991,218 @@ class _TimelineSection extends StatefulWidget {
   State<_TimelineSection> createState() => _TimelineSectionState();
 }
 
-class _TimelineSectionState extends State<_TimelineSection>
-    with SingleTickerProviderStateMixin {
-  static const _insertionDuration = Duration(milliseconds: 720);
+class _TimelineSectionState extends State<_TimelineSection> {
   static const double _baseRailHeight = 68;
   static const double _stepRailHeight = 136;
+  static const _arrivalRailDelay = Duration(milliseconds: 202);
 
-  late final AnimationController _insertionController;
-  int? _insertingIndex;
+  double? _railHeight;
+  double? _requestedRailHeight;
+  int? _lastPendingReservationCount;
+  Timer? _railDelayTimer;
+
+  double _targetRailHeight(_TimelineSection timeline) {
+    final railSteps =
+        timeline.steps.length +
+        math.max(0, timeline.pendingReservations.length - 1);
+    return _baseRailHeight + _stepRailHeight * railSteps;
+  }
 
   @override
   void initState() {
     super.initState();
-    _insertionController = AnimationController(
-      vsync: this,
-      duration: _insertionDuration,
-      value: 1,
-    )..addStatusListener(_handleInsertionStatus);
+    _railHeight = _targetRailHeight(widget);
+    _requestedRailHeight = _railHeight;
+    _lastPendingReservationCount = widget.pendingReservations.length;
   }
 
   @override
   void didUpdateWidget(covariant _TimelineSection oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.items.length == oldWidget.items.length + 1) {
-      _insertingIndex = widget.items.length - 1;
-      _insertionController.forward(from: 0);
-    } else if (widget.items.length < oldWidget.items.length) {
-      _insertingIndex = null;
-      _insertionController.value = 1;
+    final newTarget = _targetRailHeight(widget);
+    final oldTarget = _requestedRailHeight ?? _railHeight ?? newTarget;
+    final newPendingCount = widget.pendingReservations.length;
+    final oldPendingCount = _lastPendingReservationCount ?? newPendingCount;
+
+    _requestedRailHeight = newTarget;
+    _lastPendingReservationCount = newPendingCount;
+    if (newTarget == oldTarget) return;
+
+    _railDelayTimer?.cancel();
+    if (newTarget < oldTarget || newPendingCount > oldPendingCount) {
+      _railHeight = newTarget;
+      return;
     }
-  }
 
-  void _handleInsertionStatus(AnimationStatus status) {
-    if (status != AnimationStatus.completed || _insertingIndex == null) return;
-
-    setState(() {
-      _insertingIndex = null;
+    _railDelayTimer = Timer(_arrivalRailDelay, () {
+      if (!mounted) return;
+      setState(() {
+        _railHeight = newTarget;
+      });
     });
   }
 
   @override
   void dispose() {
-    _insertionController
-      ..removeStatusListener(_handleInsertionStatus)
-      ..dispose();
+    _railDelayTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingReservations = widget.pendingReservations;
+    _requestedRailHeight ??= _targetRailHeight(widget);
+    _lastPendingReservationCount ??= pendingReservations.length;
+    final firstPosition = widget.steps.isNotEmpty
+        ? widget.steps.first.item.startPosition
+        : pendingReservations.isNotEmpty
+        ? pendingReservations.first.item.startPosition
+        : widget.requiredNextPosition;
+
+    return Stack(
+      children: [
+        Positioned(
+          left: 13.5,
+          top: 14,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeInOutCubic,
+            width: 1,
+            height: _railHeight ??= _targetRailHeight(widget),
+            color: Colors.white.withOpacity(0.14),
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TimelinePositionNode(value: firstPosition),
+            const SizedBox(height: 6),
+            for (var index = 0; index < widget.steps.length; index++)
+              _AnimatedTimelineStepEntry(
+                key: ValueKey('timeline-step-${widget.steps[index].id}'),
+                index: index,
+                step: widget.steps[index],
+                onRemove: () => widget.onRemoveAt(index),
+                onTap: () => widget.onItemTap(widget.steps[index].item),
+                resolvePreviewPath: widget.resolvePreviewPath,
+                resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
+              ),
+            for (
+              var index = 0;
+              index < pendingReservations.length;
+              index++
+            ) ...[
+              _RevealingAddTimelineStep(
+                key: ValueKey(
+                  'placeholder-${pendingReservations[index].handle.id}',
+                ),
+                handle: pendingReservations[index].handle,
+                index: widget.steps.length + index,
+                requiredPosition: pendingReservations[index].item.startPosition,
+                isFirstStep: widget.steps.isEmpty && index == 0,
+                revealDelay: Duration.zero,
+                onTap: widget.onAddStep,
+              ),
+              if (index < pendingReservations.length - 1) ...[
+                const SizedBox(height: 6),
+                _RevealingTimelinePositionNode(
+                  key: ValueKey(
+                    'pending-position-${pendingReservations[index + 1].handle.id}',
+                  ),
+                  value: pendingReservations[index].item.endPosition,
+                ),
+                const SizedBox(height: 6),
+              ],
+            ],
+            if (pendingReservations.isEmpty)
+              _RevealingAddTimelineStep(
+                key: ValueKey('placeholder-${widget.openPlaceholderHandle.id}'),
+                handle: widget.openPlaceholderHandle,
+                index: widget.steps.length,
+                requiredPosition: widget.requiredNextPosition,
+                isFirstStep: widget.steps.isEmpty,
+                revealDelay: _timelinePlaceholderRevealDelay,
+                onTap: widget.onAddStep,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RevealingTimelinePositionNode extends StatelessWidget {
+  const _RevealingTimelinePositionNode({super.key, required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 238),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) {
+        return Opacity(
+          opacity: progress,
+          child: Transform.translate(
+            offset: Offset(0, -6 * (1 - progress)),
+            child: child,
+          ),
+        );
+      },
+      child: _TimelinePositionNode(value: value),
+    );
+  }
+}
+
+class _AnimatedTimelineStepEntry extends StatefulWidget {
+  const _AnimatedTimelineStepEntry({
+    super.key,
+    required this.index,
+    required this.step,
+    required this.onRemove,
+    required this.onTap,
+    required this.resolvePreviewPath,
+    required this.resolveCachedPreviewPath,
+  });
+
+  final int index;
+  final _TimelineVisualStep step;
+  final VoidCallback onRemove;
+  final VoidCallback onTap;
+  final Future<String?> Function(String? previewPath) resolvePreviewPath;
+  final String? Function(String? previewPath) resolveCachedPreviewPath;
+
+  @override
+  State<_AnimatedTimelineStepEntry> createState() =>
+      _AnimatedTimelineStepEntryState();
+}
+
+class _AnimatedTimelineStepEntryState extends State<_AnimatedTimelineStepEntry>
+    with SingleTickerProviderStateMixin {
+  static const _insertionDuration = Duration(milliseconds: 720);
+
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _insertionDuration,
+      value: widget.step.animateOnMount ? 0 : 1,
+    );
+
+    if (widget.step.animateOnMount) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
     super.dispose();
   }
 
@@ -775,80 +1213,125 @@ class _TimelineSectionState extends State<_TimelineSection>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _insertionController,
+      animation: _controller,
       builder: (context, _) {
-        final items = widget.items;
-        final insertionProgress = _insertionController.value;
-        final hasInsertion = _insertingIndex != null;
-        final railProgress = hasInsertion
-            ? Curves.easeInOutCubic.transform(
-                _interval(insertionProgress, 0.28, 0.72),
-              )
-            : 1.0;
-        final completedSteps = items.length - (hasInsertion ? 1 : 0);
-        final visibleRailSteps = hasInsertion
-            ? completedSteps + railProgress
-            : items.length.toDouble();
-        final railHeight = _baseRailHeight + _stepRailHeight * visibleRailSteps;
-        final positionReveal = hasInsertion
+        final insertionProgress = _controller.value;
+        final positionReveal = widget.step.animatePositionOnMount
             ? Curves.easeOut.transform(_interval(insertionProgress, 0.34, 0.64))
             : 1.0;
-        final placeholderReveal = hasInsertion
-            ? Curves.easeOutCubic.transform(
-                _interval(insertionProgress, 0.45, 0.78),
-              )
-            : 1.0;
-        final firstPosition = items.isEmpty
-            ? widget.requiredNextPosition
-            : items.first.startPosition;
 
-        return Stack(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Positioned(
-              left: 13.5,
-              top: 14,
-              child: Container(
-                width: 1,
-                height: railHeight,
-                color: Colors.white.withOpacity(0.14),
-              ),
+            _TimelineAnimationTile(
+              index: widget.index,
+              item: widget.step.item,
+              insertionProgress: insertionProgress,
+              onRemove: widget.onRemove,
+              onTap: widget.onTap,
+              resolvePreviewPath: widget.resolvePreviewPath,
+              resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _TimelinePositionNode(value: firstPosition),
-                const SizedBox(height: 6),
-                for (var index = 0; index < items.length; index++) ...[
-                  _TimelineAnimationTile(
-                    index: index,
-                    item: items[index],
-                    insertionProgress: index == _insertingIndex
-                        ? insertionProgress
-                        : 1,
-                    onRemove: () => widget.onRemoveAt(index),
-                    onTap: () => widget.onItemTap(items[index]),
-                    resolvePreviewPath: widget.resolvePreviewPath,
-                    resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
-                  ),
-                  const SizedBox(height: 6),
-                  _AnimatedTimelinePositionNode(
-                    value: items[index].endPosition,
-                    progress: index == _insertingIndex ? positionReveal : 1,
-                  ),
-                  const SizedBox(height: 6),
-                ],
-                _AddTimelineStep(
-                  key: widget.addStepKey,
-                  flightTargetKey: widget.addStepFlightTargetKey,
-                  index: items.length,
-                  requiredPosition: widget.requiredNextPosition,
-                  isFirstStep: items.isEmpty,
-                  revealProgress: placeholderReveal,
-                  onTap: widget.onAddStep,
-                ),
-              ],
+            const SizedBox(height: 6),
+            _AnimatedTimelinePositionNode(
+              value: widget.step.item.endPosition,
+              progress: positionReveal,
             ),
+            const SizedBox(height: 6),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _RevealingAddTimelineStep extends StatefulWidget {
+  const _RevealingAddTimelineStep({
+    super.key,
+    required this.handle,
+    required this.index,
+    required this.requiredPosition,
+    required this.isFirstStep,
+    required this.revealDelay,
+    required this.onTap,
+  });
+
+  final _TimelinePlaceholderHandle handle;
+  final int index;
+  final String requiredPosition;
+  final bool isFirstStep;
+  final Duration revealDelay;
+  final VoidCallback onTap;
+
+  @override
+  State<_RevealingAddTimelineStep> createState() =>
+      _RevealingAddTimelineStepState();
+}
+
+class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
+    with SingleTickerProviderStateMixin {
+  static const _revealDuration = Duration(milliseconds: 238);
+
+  late final AnimationController _controller;
+  Timer? _revealTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _revealDuration,
+      value: widget.handle.animateOnMount ? 0 : 1,
+    );
+
+    if (widget.handle.animateOnMount) {
+      _startReveal(widget.revealDelay);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _RevealingAddTimelineStep oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.revealDelay > Duration.zero &&
+        widget.revealDelay == Duration.zero &&
+        !_controller.isCompleted) {
+      _startReveal(Duration.zero);
+    }
+  }
+
+  void _startReveal(Duration delay) {
+    _revealTimer?.cancel();
+    if (delay == Duration.zero) {
+      _controller.forward();
+      return;
+    }
+
+    _revealTimer = Timer(delay, () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _revealTimer?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return _AddTimelineStep(
+          key: widget.handle.containerKey,
+          flightTargetKey: widget.handle.flightTargetKey,
+          index: widget.index,
+          requiredPosition: widget.requiredPosition,
+          isFirstStep: widget.isFirstStep,
+          revealProgress: Curves.easeOutCubic.transform(_controller.value),
+          onTap: widget.onTap,
         );
       },
     );
