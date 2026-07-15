@@ -97,13 +97,11 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
         resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
         resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       ),
-      actionTiming: AnimationFlightActionTiming.afterFlight,
-      action: () async {
-        await _handlePrimaryAction(entry);
-        await Future<void>.delayed(_arrivalHapticDelay);
-        await HapticFeedback.heavyImpact();
-      },
+      actionTiming: AnimationFlightActionTiming.alongsideFlight,
+      action: () => _handlePrimaryAction(entry),
     );
+    await Future<void>.delayed(_arrivalHapticDelay);
+    await HapticFeedback.heavyImpact();
   }
 
   @override

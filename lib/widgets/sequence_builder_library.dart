@@ -251,89 +251,121 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                   child: IgnorePointer(
                     ignoring:
                         height < SequenceBuilderLibrary.collapsedHeight - 1,
-                    child: widget.items.isEmpty
-                        ? Center(
-                            child: Text(
-                              'No valid next animations available',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.62),
-                              ),
-                            ),
-                          )
-                        : LayoutBuilder(
-                            builder: (context, constraints) {
-                              final gridHeight = expandedProgress > 0
-                                  ? constraints.maxHeight
-                                  : constraints.constrainHeight(
-                                      SequenceBuilderLibrary
-                                          .collapsedGridHeight,
-                                    );
-
-                              return Align(
-                                alignment: Alignment.topLeft,
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  height: gridHeight,
-                                  child: GridView.builder(
-                                    padding: const EdgeInsets.only(
-                                      bottom:
-                                          AppShell.floatingNavExtraScrollSpace,
-                                    ),
-                                    physics: expandedProgress > 0
-                                        ? const BouncingScrollPhysics()
-                                        : const NeverScrollableScrollPhysics(),
-                                    gridDelegate:
-                                        const SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: 3,
-                                          mainAxisSpacing: 12,
-                                          crossAxisSpacing: 12,
-                                          mainAxisExtent: SequenceBuilderLibrary
-                                              .animationCardExtent,
-                                        ),
-                                    itemCount: widget.items.length,
-                                    itemBuilder: (context, index) {
-                                      final entry = widget.items[index];
-                                      final flightKey = GlobalKey(
-                                        debugLabel:
-                                            'builder-card-${entry.item.animationName}',
-                                      );
-                                      final card = AnimationCard.compact(
-                                        key: ValueKey(entry.item.animationName),
-                                        flightKey: flightKey,
-                                        item: entry.item,
-                                        isDownloaded: entry.isInstalled,
-                                        isDownloading: entry.isDownloading,
-                                        resolvePreviewPath: widget
-                                            .libraryController
-                                            .getOrDownloadPreview,
-                                        resolveCachedPreviewPath: widget
-                                            .libraryController
-                                            .getCachedPreviewPath,
-                                        onPrimaryAction: () => widget
-                                            .onPrimaryAction(flightKey, entry),
-                                        onInfoTap: () =>
-                                            widget.onItemTap(entry),
-                                      );
-
-                                      if (index < 3) return card;
-
-                                      return AnimatedOpacity(
-                                        key: ValueKey(
-                                          'reveal-${entry.item.animationName}',
-                                        ),
-                                        opacity: expandedCardsOpacity,
-                                        duration: _dragHeight == null
-                                            ? const Duration(milliseconds: 180)
-                                            : Duration.zero,
-                                        curve: Curves.easeOut,
-                                        child: card,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              );
-                            },
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 150),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      layoutBuilder: (currentChild, previousChildren) {
+                        return Stack(
+                          alignment: Alignment.topCenter,
+                          children: [...previousChildren, ?currentChild],
+                        );
+                      },
+                      transitionBuilder: (child, animation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            alignment: Alignment.topCenter,
+                            scale: Tween<double>(
+                              begin: 0.975,
+                              end: 1,
+                            ).animate(animation),
+                            child: child,
                           ),
+                        );
+                      },
+                      child: widget.items.isEmpty
+                          ? const _EmptyLibraryState(
+                              key: ValueKey('empty-library'),
+                            )
+                          : LayoutBuilder(
+                              key: ValueKey(
+                                widget.items
+                                    .map((entry) => entry.item.animationName)
+                                    .join('|'),
+                              ),
+                              builder: (context, constraints) {
+                                final gridHeight = expandedProgress > 0
+                                    ? constraints.maxHeight
+                                    : constraints.constrainHeight(
+                                        SequenceBuilderLibrary
+                                            .collapsedGridHeight,
+                                      );
+
+                                return Align(
+                                  alignment: Alignment.topLeft,
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    height: gridHeight,
+                                    child: GridView.builder(
+                                      padding: const EdgeInsets.only(
+                                        bottom: AppShell
+                                            .floatingNavExtraScrollSpace,
+                                      ),
+                                      physics: expandedProgress > 0
+                                          ? const BouncingScrollPhysics()
+                                          : const NeverScrollableScrollPhysics(),
+                                      gridDelegate:
+                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: 3,
+                                            mainAxisSpacing: 12,
+                                            crossAxisSpacing: 12,
+                                            mainAxisExtent:
+                                                SequenceBuilderLibrary
+                                                    .animationCardExtent,
+                                          ),
+                                      itemCount: widget.items.length,
+                                      itemBuilder: (context, index) {
+                                        final entry = widget.items[index];
+                                        final flightKey = GlobalKey(
+                                          debugLabel:
+                                              'builder-card-${entry.item.animationName}',
+                                        );
+                                        final card = AnimationCard.compact(
+                                          key: ValueKey(
+                                            entry.item.animationName,
+                                          ),
+                                          flightKey: flightKey,
+                                          item: entry.item,
+                                          isDownloaded: entry.isInstalled,
+                                          isDownloading: entry.isDownloading,
+                                          resolvePreviewPath: widget
+                                              .libraryController
+                                              .getOrDownloadPreview,
+                                          resolveCachedPreviewPath: widget
+                                              .libraryController
+                                              .getCachedPreviewPath,
+                                          onPrimaryAction: () =>
+                                              widget.onPrimaryAction(
+                                                flightKey,
+                                                entry,
+                                              ),
+                                          onInfoTap: () =>
+                                              widget.onItemTap(entry),
+                                        );
+
+                                        if (index < 3) return card;
+
+                                        return AnimatedOpacity(
+                                          key: ValueKey(
+                                            'reveal-${entry.item.animationName}',
+                                          ),
+                                          opacity: expandedCardsOpacity,
+                                          duration: _dragHeight == null
+                                              ? const Duration(
+                                                  milliseconds: 180,
+                                                )
+                                              : Duration.zero,
+                                          curve: Curves.easeOut,
+                                          child: card,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
                   ),
                 ),
               ],
@@ -361,6 +393,74 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyLibraryState extends StatelessWidget {
+  const _EmptyLibraryState({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(2, 10, 2, 0),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.045),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: const Color(0xFFC8A7FF).withValues(alpha: 0.18),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8F55FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.search_off_rounded,
+                  size: 22,
+                  color: Color(0xFFC8A7FF),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'No matching animations',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'No card can continue from the current position.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.58),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

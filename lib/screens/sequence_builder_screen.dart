@@ -54,6 +54,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   final GlobalKey _libraryPanelKey = GlobalKey(
     debugLabel: 'sequence-library-panel',
   );
+  // Nullable so adding this state during a hot reload cannot leave an
+  // existing State instance with an uninitialized late field.
+  int? _visuallyCommittedAnimationCount;
+  int _activeVisualAddFlights = 0;
   SequenceBuilderLibraryPanelState _libraryPanelState =
       SequenceBuilderLibraryPanelState.fullyCollapsed;
 
@@ -67,6 +71,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _sequenceNameController = TextEditingController(
       text: widget.sequenceController.sequenceName,
     );
+    _visuallyCommittedAnimationCount =
+        widget.sequenceController.selectedAnimations.length;
 
     widget.sequenceController.addListener(_onControllerChanged);
     widget.libraryController.addListener(_onControllerChanged);
@@ -88,6 +94,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       _sequenceNameController.selection = TextSelection.fromPosition(
         TextPosition(offset: _sequenceNameController.text.length),
       );
+    }
+
+    final logicalAnimationCount =
+        widget.sequenceController.selectedAnimations.length;
+    final visuallyCommittedAnimationCount =
+        _visuallyCommittedAnimationCount ?? logicalAnimationCount;
+    if (_activeVisualAddFlights == 0 ||
+        logicalAnimationCount < visuallyCommittedAnimationCount) {
+      _visuallyCommittedAnimationCount = logicalAnimationCount;
     }
 
     if (mounted) {
@@ -146,17 +161,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   }
 
   List<LibraryDisplayItem> get _libraryItems {
-    final recommended = widget.libraryController.recommendedNextItems;
-
-    if (recommended.isNotEmpty) {
-      return recommended;
-    }
-
-    return widget.libraryController.allItems;
+    return widget.libraryController.recommendedNextItems;
   }
 
-  String get _requiredNextPosition {
-    final requiredStart = widget.sequenceController.requiredNextStartPosition;
+  String _visibleRequiredNextPosition(
+    List<AnimationLibraryItem> visibleAnimations,
+  ) {
+    final requiredStart = visibleAnimations.isEmpty
+        ? null
+        : visibleAnimations.last.endPosition;
 
     if (requiredStart == null || requiredStart.trim().isEmpty) {
       return 'Any';
@@ -168,6 +181,14 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     final sequence = widget.sequenceController;
+    final logicalAnimations = sequence.selectedAnimations;
+    final visuallyCommittedAnimationCount = _visuallyCommittedAnimationCount ??=
+        logicalAnimations.length;
+    final visibleAnimations = logicalAnimations
+        .take(
+          math.min(visuallyCommittedAnimationCount, logicalAnimations.length),
+        )
+        .toList(growable: false);
     final timelineBottomPadding =
         _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
         ? SequenceBuilderLibrary.fullyCollapsedHeight +
@@ -220,25 +241,61 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                                     ),
                                   ),
                                   const Spacer(),
-                                  Visibility(
-                                    visible:
-                                        sequence.selectedAnimations.isNotEmpty,
-                                    maintainAnimation: true,
-                                    maintainSize: true,
-                                    maintainState: true,
-                                    child: TextButton.icon(
-                                      onPressed: sequence.clearAnimations,
-                                      icon: const Icon(Icons.refresh, size: 18),
-                                      label: const Text('Clear All'),
-                                      style: TextButton.styleFrom(
-                                        minimumSize: const Size(0, 36),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
+                                  AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 160),
+                                    switchInCurve: Curves.easeOutCubic,
+                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (child, animation) {
+                                      return FadeTransition(
+                                        opacity: animation,
+                                        child: ScaleTransition(
+                                          scale: Tween<double>(
+                                            begin: 0.96,
+                                            end: 1,
+                                          ).animate(animation),
+                                          child: child,
                                         ),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                    ),
+                                      );
+                                    },
+                                    child: visibleAnimations.isEmpty
+                                        ? const SizedBox(
+                                            key: ValueKey(
+                                              'clear-all-placeholder',
+                                            ),
+                                          )
+                                        : OutlinedButton.icon(
+                                            key: const ValueKey(
+                                              'clear-all-button',
+                                            ),
+                                            onPressed: sequence.clearAnimations,
+                                            icon: const Icon(
+                                              Icons.refresh_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text('Clear All'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: const Color(
+                                                0xFFC8A7FF,
+                                              ),
+                                              backgroundColor: const Color(
+                                                0xFF8F55FF,
+                                              ).withValues(alpha: 0.07),
+                                              side: BorderSide(
+                                                color: const Color(
+                                                  0xFFC8A7FF,
+                                                ).withValues(alpha: 0.26),
+                                              ),
+                                              minimumSize: const Size(0, 34),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 11,
+                                                  ),
+                                              shape: const StadiumBorder(),
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                          ),
                                   ),
                                 ],
                               ),
@@ -246,8 +303,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                             const SizedBox(height: 12),
                             _TimelineSection(
                               key: _timelineTargetKey,
-                              items: sequence.selectedAnimations,
-                              requiredNextPosition: _requiredNextPosition,
+                              items: visibleAnimations,
+                              requiredNextPosition:
+                                  _visibleRequiredNextPosition(
+                                    visibleAnimations,
+                                  ),
                               onRemoveAt: sequence.removeAnimationAt,
                               onItemTap: _showTimelineAnimationInfo,
                               onAddStep: _expandLibrary,
@@ -454,48 +514,66 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
     final addStepFlight = _prepareAddStepFlight();
     final flightTarget = addStepFlight.flightTarget;
+    var animationWasAdded = false;
+    _activeVisualAddFlights++;
     final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
       entry.item.previewPath,
     );
-    final flight = AnimationCardFlight.run(
-      sourceKey: sourceKey,
-      targetKey: flightTarget == null && !_isLibraryExpanded
-          ? _timelineTargetKey
-          : null,
-      behindPanelKey: _isLibraryExpanded ? _libraryPanelKey : null,
-      destination: flightTarget != null
-          ? (_) => flightTarget
-          : _isLibraryExpanded
-          ? _expandedPanelDestination
-          : null,
-      finalScale: _isLibraryExpanded
-          ? AnimationCardFlightTuning.expandedBuilderFinalScale
-          : AnimationCardFlightTuning.collapsedBuilderFinalScale,
-      flightSize: flightSize,
-      fadeOut: false,
-      flightChild: AnimationPreviewFrame(
-        previewPath: cachedPreviewPath ?? entry.item.previewPath,
-        resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
-        resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
-      ),
-      actionTiming: AnimationFlightActionTiming.afterFlight,
-      action: () async {
-        final itemCountBefore =
-            widget.sequenceController.selectedAnimations.length;
-        await _handlePrimaryAction(entry);
+    try {
+      final flight = AnimationCardFlight.run(
+        sourceKey: sourceKey,
+        targetKey: flightTarget == null && !_isLibraryExpanded
+            ? _timelineTargetKey
+            : null,
+        behindPanelKey: _isLibraryExpanded ? _libraryPanelKey : null,
+        destination: flightTarget != null
+            ? (_) => flightTarget
+            : _isLibraryExpanded
+            ? _expandedPanelDestination
+            : null,
+        finalScale: _isLibraryExpanded
+            ? AnimationCardFlightTuning.expandedBuilderFinalScale
+            : AnimationCardFlightTuning.collapsedBuilderFinalScale,
+        flightSize: flightSize,
+        fadeOut: false,
+        flightChild: AnimationPreviewFrame(
+          previewPath: cachedPreviewPath ?? entry.item.previewPath,
+          resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+          resolveCachedPreviewPath:
+              widget.libraryController.getCachedPreviewPath,
+        ),
+        actionTiming: AnimationFlightActionTiming.alongsideFlight,
+        action: () async {
+          final itemCountBefore =
+              widget.sequenceController.selectedAnimations.length;
+          await _handlePrimaryAction(entry);
+          animationWasAdded =
+              widget.sequenceController.selectedAnimations.length >
+              itemCountBefore;
+        },
+      );
 
-        if (widget.sequenceController.selectedAnimations.length >
-            itemCountBefore) {
-          if (!addStepFlight.preScrolled) {
-            unawaited(_scrollWithRevealingPlaceholder());
-          }
-          await Future<void>.delayed(_previewPopHapticDelay);
-          await HapticFeedback.heavyImpact();
+      await Future.wait<void>([addStepFlight.scrolling, flight]);
+
+      if (animationWasAdded && mounted) {
+        setState(() {
+          final visuallyCommittedAnimationCount =
+              _visuallyCommittedAnimationCount ?? 0;
+          _visuallyCommittedAnimationCount = math.min(
+            visuallyCommittedAnimationCount + 1,
+            widget.sequenceController.selectedAnimations.length,
+          );
+        });
+
+        if (!addStepFlight.preScrolled) {
+          unawaited(_scrollWithRevealingPlaceholder());
         }
-      },
-    );
-
-    await Future.wait<void>([addStepFlight.scrolling, flight]);
+        await Future<void>.delayed(_previewPopHapticDelay);
+        await HapticFeedback.heavyImpact();
+      }
+    } finally {
+      _activeVisualAddFlights--;
+    }
   }
 
   Offset _expandedPanelDestination(Rect sourceRect) {
