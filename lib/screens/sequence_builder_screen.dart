@@ -63,10 +63,12 @@ class _PendingTimelineReservation {
   final _TimelinePlaceholderHandle handle;
   final AnimationLibraryItem item;
   bool hasArrived = false;
+  bool isCancelled = false;
 }
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   static const _previewPopHapticDelay = Duration(milliseconds: 90);
+  static const int _maxEditHistoryLength = 10;
 
   /// A completed step adds a 96 px tile, two 6 px gaps and a 28 px
   /// position node. Reserve it before insertion so one scroll reveals both
@@ -91,6 +93,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   int? _nextTimelineSlotIdState;
   int? _timelineScrollRequestVersionState;
   int _activeVisualAddFlights = 0;
+  final List<List<AnimationLibraryItem>> _undoHistory = [];
+  final List<List<AnimationLibraryItem>> _redoHistory = [];
   SequenceBuilderLibraryPanelState _libraryPanelState =
       SequenceBuilderLibraryPanelState.fullyCollapsed;
 
@@ -220,23 +224,231 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _lastClaimedPlaceholderHandle = null;
   }
 
-  void _removeTimelineAnimationAt(int index) {
-    if (index < 0 || index >= _visualTimelineSteps.length) return;
-
-    setState(() {
-      _visualTimelineSteps.removeAt(index);
-    });
-    widget.sequenceController.removeAnimationAt(index);
+  void _recordTimelineEdit(List<AnimationLibraryItem> previousState) {
+    _undoHistory.add(List<AnimationLibraryItem>.from(previousState));
+    if (_undoHistory.length > _maxEditHistoryLength) {
+      _undoHistory.removeAt(0);
+    }
+    _redoHistory.clear();
   }
 
-  void _clearAllTimelineAnimations() {
+  void _cancelPendingTimelineReservations() {
+    for (final reservation in _pendingTimelineReservations) {
+      reservation.isCancelled = true;
+    }
+    _pendingTimelineReservations.clear();
+  }
+
+  void _restoreTimelineSnapshot(List<AnimationLibraryItem> snapshot) {
     setState(() {
+      _cancelPendingTimelineReservations();
+      _visualTimelineSteps = snapshot
+          .map(
+            (item) => _TimelineVisualStep(
+              id: _takeTimelineSlotId(),
+              item: item,
+              animateOnMount: false,
+              animatePositionOnMount: false,
+            ),
+          )
+          .toList();
+      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
+      _lastClaimedPlaceholderHandle = null;
+    });
+    widget.sequenceController.replaceAnimations(snapshot);
+  }
+
+  void _undoTimelineEdit() {
+    if (_undoHistory.isEmpty ||
+        _activeVisualAddFlights > 0 ||
+        _pendingTimelineReservations.isNotEmpty) {
+      return;
+    }
+
+    final current = List<AnimationLibraryItem>.from(
+      widget.sequenceController.selectedAnimations,
+    );
+    final previous = _undoHistory.removeLast();
+    _redoHistory.add(current);
+    _restoreTimelineSnapshot(previous);
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _redoTimelineEdit() {
+    if (_redoHistory.isEmpty ||
+        _activeVisualAddFlights > 0 ||
+        _pendingTimelineReservations.isNotEmpty) {
+      return;
+    }
+
+    final current = List<AnimationLibraryItem>.from(
+      widget.sequenceController.selectedAnimations,
+    );
+    final next = _redoHistory.removeLast();
+    _undoHistory.add(current);
+    if (_undoHistory.length > _maxEditHistoryLength) {
+      _undoHistory.removeAt(0);
+    }
+    _restoreTimelineSnapshot(next);
+    unawaited(HapticFeedback.mediumImpact());
+  }
+
+  Future<bool> _confirmDeletion({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required IconData icon,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.68),
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 340),
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: const Color(0xFF26232C),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.34),
+                blurRadius: 28,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF718B).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: Icon(icon, color: const Color(0xFFFF8CA0), size: 21),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                message,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.68),
+                  fontSize: 14,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white.withValues(alpha: 0.72),
+                        minimumSize: const Size(0, 44),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.1),
+                          ),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(true),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF718B),
+                        foregroundColor: const Color(0xFF26151B),
+                        minimumSize: const Size(0, 44),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(confirmLabel),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _removeTimelineAnimationAt(int index) async {
+    if (index < 0 || index >= _visualTimelineSteps.length) return;
+
+    final lastStep = _visualTimelineSteps.length;
+    final removedCount = lastStep - index;
+    if (removedCount > 1) {
+      final confirmed = await _confirmDeletion(
+        title: 'Delete steps ${index + 1}–$lastStep?',
+        message:
+            'Following steps must also be removed so the poses still match.',
+        confirmLabel: 'Delete',
+        icon: Icons.delete_outline_rounded,
+      );
+      if (!confirmed || !mounted) return;
+    }
+
+    setState(() {
+      _recordTimelineEdit(widget.sequenceController.selectedAnimations);
+      _cancelPendingTimelineReservations();
+      _visualTimelineSteps.removeRange(index, _visualTimelineSteps.length);
+      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
+      _lastClaimedPlaceholderHandle = null;
+    });
+    widget.sequenceController.removeAnimationsFrom(index);
+    unawaited(HapticFeedback.mediumImpact());
+  }
+
+  Future<void> _clearAllTimelineAnimations() async {
+    final stepCount = widget.sequenceController.selectedAnimations.length;
+    if (stepCount == 0) return;
+
+    final confirmed = await _confirmDeletion(
+      title: 'Reset sequence?',
+      message:
+          'All $stepCount animation ${stepCount == 1 ? 'step' : 'steps'} will be removed.',
+      confirmLabel: 'Reset',
+      icon: Icons.refresh_rounded,
+    );
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _recordTimelineEdit(widget.sequenceController.selectedAnimations);
       _visualTimelineSteps.clear();
-      _pendingTimelineReservations.clear();
+      _cancelPendingTimelineReservations();
       _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
       _lastClaimedPlaceholderHandle = null;
     });
     widget.sequenceController.clearAnimations();
+    unawaited(HapticFeedback.mediumImpact());
   }
 
   Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
@@ -278,8 +490,24 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   }
 
   Future<void> _handlePrimaryAction(LibraryDisplayItem entry) async {
+    final previousState = List<AnimationLibraryItem>.from(
+      widget.sequenceController.selectedAnimations,
+    );
     try {
       await widget.libraryController.performPrimaryAction(entry);
+
+      final currentState = widget.sequenceController.selectedAnimations;
+      final sequenceChanged =
+          previousState.length != currentState.length ||
+          List<bool>.generate(
+            previousState.length,
+            (index) => identical(previousState[index], currentState[index]),
+          ).any((matches) => !matches);
+      if (sequenceChanged && mounted) {
+        setState(() {
+          _recordTimelineEdit(previousState);
+        });
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -355,72 +583,92 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                           children: [
                             SizedBox(
                               height: 40,
-                              child: Row(
+                              child: Stack(
+                                alignment: Alignment.center,
                                 children: [
-                                  const Text(
-                                    'Timeline',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Timeline',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                   ),
-                                  const Spacer(),
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 160),
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
-                                    transitionBuilder: (child, animation) {
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: ScaleTransition(
-                                          scale: Tween<double>(
-                                            begin: 0.96,
-                                            end: 1,
-                                          ).animate(animation),
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    child: visibleAnimations.isEmpty
-                                        ? const SizedBox(
-                                            key: ValueKey(
-                                              'clear-all-placeholder',
-                                            ),
-                                          )
-                                        : OutlinedButton.icon(
-                                            key: const ValueKey(
-                                              'clear-all-button',
-                                            ),
-                                            onPressed:
-                                                _clearAllTimelineAnimations,
-                                            icon: const Icon(
-                                              Icons.refresh_rounded,
-                                              size: 16,
-                                            ),
-                                            label: const Text('Clear All'),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: const Color(
-                                                0xFFC8A7FF,
-                                              ),
-                                              backgroundColor: const Color(
-                                                0xFF8F55FF,
-                                              ).withValues(alpha: 0.07),
-                                              side: BorderSide(
-                                                color: const Color(
-                                                  0xFFC8A7FF,
-                                                ).withValues(alpha: 0.26),
-                                              ),
-                                              minimumSize: const Size(0, 34),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 11,
-                                                  ),
-                                              shape: const StadiumBorder(),
-                                              tapTargetSize:
-                                                  MaterialTapTargetSize
-                                                      .shrinkWrap,
-                                            ),
+                                  _TimelineHistoryControls(
+                                    canUndo:
+                                        _undoHistory.isNotEmpty &&
+                                        _activeVisualAddFlights == 0 &&
+                                        _pendingTimelineReservations.isEmpty,
+                                    canRedo:
+                                        _redoHistory.isNotEmpty &&
+                                        _activeVisualAddFlights == 0 &&
+                                        _pendingTimelineReservations.isEmpty,
+                                    onUndo: _undoTimelineEdit,
+                                    onRedo: _redoTimelineEdit,
+                                  ),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 160,
+                                      ),
+                                      switchInCurve: Curves.easeOutCubic,
+                                      switchOutCurve: Curves.easeInCubic,
+                                      transitionBuilder: (child, animation) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: ScaleTransition(
+                                            scale: Tween<double>(
+                                              begin: 0.96,
+                                              end: 1,
+                                            ).animate(animation),
+                                            child: child,
                                           ),
+                                        );
+                                      },
+                                      child: visibleAnimations.isEmpty
+                                          ? const SizedBox(
+                                              key: ValueKey(
+                                                'clear-all-placeholder',
+                                              ),
+                                            )
+                                          : OutlinedButton.icon(
+                                              key: const ValueKey(
+                                                'clear-all-button',
+                                              ),
+                                              onPressed:
+                                                  _clearAllTimelineAnimations,
+                                              icon: const Icon(
+                                                Icons.refresh_rounded,
+                                                size: 16,
+                                              ),
+                                              label: const Text('Clear All'),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: const Color(
+                                                  0xFFC8A7FF,
+                                                ),
+                                                backgroundColor: const Color(
+                                                  0xFF8F55FF,
+                                                ).withValues(alpha: 0.07),
+                                                side: BorderSide(
+                                                  color: const Color(
+                                                    0xFFC8A7FF,
+                                                  ).withValues(alpha: 0.26),
+                                                ),
+                                                minimumSize: const Size(0, 34),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 11,
+                                                    ),
+                                                shape: const StadiumBorder(),
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                              ),
+                                            ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -775,7 +1023,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
       await flight;
 
-      if (animationWasAdded && mounted) {
+      if (animationWasAdded && mounted && !reservation.isCancelled) {
         late final _TimelinePlaceholderHandle scrollTarget;
         late final bool revealsFinalPlaceholder;
         setState(() {
@@ -812,6 +1060,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       }
     } finally {
       _activeVisualAddFlights--;
+      if (mounted) setState(() {});
     }
   }
 
@@ -844,6 +1093,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       );
     } finally {
       _activeVisualAddFlights--;
+      if (mounted) setState(() {});
     }
   }
 
@@ -860,6 +1110,82 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
     final fallbackY = sourceRect.top > 160 ? sourceRect.top - 120 : 40.0;
     return Offset(sourceRect.center.dx, fallbackY);
+  }
+}
+
+class _TimelineHistoryControls extends StatelessWidget {
+  const _TimelineHistoryControls({
+    required this.canUndo,
+    required this.canRedo,
+    required this.onUndo,
+    required this.onRedo,
+  });
+
+  final bool canUndo;
+  final bool canRedo;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.035),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _HistoryIconButton(
+            tooltip: 'Undo',
+            icon: Icons.undo_rounded,
+            enabled: canUndo,
+            onPressed: onUndo,
+          ),
+          Container(
+            width: 1,
+            height: 16,
+            color: Colors.white.withValues(alpha: 0.07),
+          ),
+          _HistoryIconButton(
+            tooltip: 'Redo',
+            icon: Icons.redo_rounded,
+            enabled: canRedo,
+            onPressed: onRedo,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryIconButton extends StatelessWidget {
+  const _HistoryIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: enabled ? onPressed : null,
+      icon: Icon(icon, size: 17),
+      color: const Color(0xFFC8A7FF),
+      disabledColor: Colors.white.withValues(alpha: 0.18),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 32),
+      splashRadius: 17,
+    );
   }
 }
 

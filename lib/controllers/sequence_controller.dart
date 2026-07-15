@@ -96,6 +96,26 @@ class SequenceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void removeAnimationsFrom(int index) {
+    if (index < 0 || index >= _selectedAnimations.length) return;
+
+    final removedCount = _selectedAnimations.length - index;
+    _selectedAnimations.removeRange(index, _selectedAnimations.length);
+    _addLocalLog(
+      'Removed $removedCount animation${removedCount == 1 ? '' : 's'} '
+      'from step ${index + 1}.',
+    );
+    notifyListeners();
+  }
+
+  void replaceAnimations(List<AnimationLibraryItem> animations) {
+    _selectedAnimations
+      ..clear()
+      ..addAll(animations);
+    _addLocalLog('Restored animation list (${animations.length} steps).');
+    notifyListeners();
+  }
+
   void clearAnimations() {
     _selectedAnimations.clear();
     _addLocalLog("Cleared animation list.");
