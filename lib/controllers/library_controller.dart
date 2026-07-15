@@ -4,6 +4,7 @@ import '../data/mock_animation_library.dart';
 import '../models/animation_library_item.dart';
 import '../services/remote_addressables_service.dart';
 import 'sequence_controller.dart';
+import 'sequence_history_controller.dart';
 
 class LibraryDisplayItem {
   const LibraryDisplayItem({
@@ -22,14 +23,17 @@ class LibraryDisplayItem {
 class LibraryController extends ChangeNotifier {
   LibraryController({
     required SequenceController sequenceController,
+    required SequenceHistoryController sequenceHistoryController,
     required RemoteAddressablesService remoteAddressablesService,
   }) : _sequenceController = sequenceController,
+       _sequenceHistoryController = sequenceHistoryController,
        _remoteAddressablesService = remoteAddressablesService {
     _sequenceController.addListener(_onDependenciesChanged);
     _remoteAddressablesService.addListener(_onDependenciesChanged);
   }
 
   final SequenceController _sequenceController;
+  final SequenceHistoryController _sequenceHistoryController;
   final RemoteAddressablesService _remoteAddressablesService;
 
   String? _selectedCategoryId;
@@ -132,7 +136,10 @@ class LibraryController extends ChangeNotifier {
     return entry.isRemote && !entry.isInstalled;
   }
 
-  Future<void> performPrimaryAction(LibraryDisplayItem entry) async {
+  Future<void> performPrimaryAction(
+    LibraryDisplayItem entry, {
+    String? transitionId,
+  }) async {
     if (entry.isDownloading) return;
 
     if (requiresDownload(entry)) {
@@ -142,7 +149,10 @@ class LibraryController extends ChangeNotifier {
       return;
     }
 
-    _sequenceController.addAnimationItem(entry.item);
+    _sequenceHistoryController.addAnimation(
+      entry.item,
+      transitionId: transitionId,
+    );
   }
 
   void _onDependenciesChanged() {

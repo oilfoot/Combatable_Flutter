@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/library_controller.dart';
 import 'controllers/sequence_controller.dart';
+import 'controllers/sequence_history_controller.dart';
 import 'screens/full_library_screen.dart';
 import 'widgets/floating_nav_bar.dart';
 import 'screens/home_screen.dart';
@@ -42,6 +43,7 @@ class _AppShellState extends State<AppShell> {
 
   late final RemoteAddressablesService _remoteAddressablesService;
   late final LibraryController _libraryController;
+  late final SequenceHistoryController _sequenceHistoryController;
   late final List<Widget> _pages;
 
   @override
@@ -52,8 +54,13 @@ class _AppShellState extends State<AppShell> {
       unityService: widget.unityService,
     );
 
+    _sequenceHistoryController = SequenceHistoryController(
+      sequenceController: widget.sequenceController,
+    );
+
     _libraryController = LibraryController(
       sequenceController: widget.sequenceController,
+      sequenceHistoryController: _sequenceHistoryController,
       remoteAddressablesService: _remoteAddressablesService,
     );
 
@@ -72,6 +79,7 @@ class _AppShellState extends State<AppShell> {
       ),
       SequenceBuilderScreen(
         sequenceController: widget.sequenceController,
+        sequenceHistoryController: _sequenceHistoryController,
         libraryController: _libraryController,
         onBuildUnitySequence: buildAndOpenUnity,
       ),
@@ -82,6 +90,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _libraryController.dispose();
+    _sequenceHistoryController.dispose();
     _remoteAddressablesService.dispose();
     super.dispose();
   }
