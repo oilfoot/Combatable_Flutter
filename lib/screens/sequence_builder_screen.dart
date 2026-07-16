@@ -45,12 +45,14 @@ class _TimelineVisualStep {
     required this.item,
     required this.animateOnMount,
     required this.animatePositionOnMount,
+    this.removalCompletion,
   });
 
   final int id;
   final AnimationLibraryItem item;
   final bool animateOnMount;
   final bool animatePositionOnMount;
+  final Completer<void>? removalCompletion;
 }
 
 class _TimelinePlaceholderHandle {
@@ -89,6 +91,10 @@ class _TimelineInsertionTransition {
   final Completer<void> arrival;
 }
 
+  final Completer<void> placeholderCompletion = Completer<void>();
+  bool isRemovingContent = true;
+}
+
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   static const _previewPopHapticDelay = Duration(milliseconds: 90);
 
@@ -116,7 +122,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   int? _timelineScrollRequestVersionState;
   int _nextTransitionId = 0;
   int _activeVisualAddFlights = 0;
+  int _activeVisualRemovals = 0;
   final Map<String, _TimelineInsertionTransition> _flightTransitions = {};
+  _TimelineRemovalTransition? _timelineRemovalTransition;
   StreamSubscription<SequenceMutation>? _sequenceMutationSubscription;
   SequenceBuilderLibraryPanelState _libraryPanelState =
       SequenceBuilderLibraryPanelState.fullyCollapsed;
@@ -239,6 +247,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       return;
     }
 
+    if (mutation.isRemoval) {
+      unawaited(_playTimelineRemoval(mutation));
+      return;
+    }
+
     setState(_syncVisualTimelineWithController);
   }
 
@@ -298,6 +311,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   void _undoTimelineEdit() {
     if (!widget.sequenceHistoryController.canUndo ||
         _activeVisualAddFlights > 0 ||
+        _activeVisualRemovals > 0 ||
         _pendingTimelineReservations.isNotEmpty) {
       return;
     }
@@ -309,6 +323,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   void _redoTimelineEdit() {
     if (!widget.sequenceHistoryController.canRedo ||
         _activeVisualAddFlights > 0 ||
+        _activeVisualRemovals > 0 ||
         _pendingTimelineReservations.isNotEmpty) {
       return;
     }
@@ -425,7 +440,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   }
 
   Future<void> _removeTimelineAnimationAt(int index) async {
-    if (index < 0 || index >= _visualTimelineSteps.length) return;
+    if (_activeVisualRemovals > 0 ||
+        index < 0 ||
+        index >= _visualTimelineSteps.length) {
+      return;
+    }
 
     final lastStep = _visualTimelineSteps.length;
     final removedCount = lastStep - index;
@@ -440,17 +459,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       if (!confirmed || !mounted) return;
     }
 
-    setState(() {
-      _cancelPendingTimelineReservations();
-      _visualTimelineSteps.removeRange(index, _visualTimelineSteps.length);
-      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
-      _lastClaimedPlaceholderHandle = null;
-    });
     widget.sequenceHistoryController.removeFrom(index);
-    unawaited(HapticFeedback.mediumImpact());
   }
 
   Future<void> _clearAllTimelineAnimations() async {
+    if (_activeVisualRemovals > 0) return;
     final stepCount = widget.sequenceController.selectedAnimations.length;
     if (stepCount == 0) return;
 
@@ -463,14 +476,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     );
     if (!confirmed || !mounted) return;
 
-    setState(() {
-      _visualTimelineSteps.clear();
-      _cancelPendingTimelineReservations();
-      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
-      _lastClaimedPlaceholderHandle = null;
-    });
     widget.sequenceHistoryController.clear();
-    unawaited(HapticFeedback.mediumImpact());
   }
 
   Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
@@ -614,12 +620,14 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                                             .sequenceHistoryController
                                             .canUndo &&
                                         _activeVisualAddFlights == 0 &&
+                                        _activeVisualRemovals == 0 &&
                                         _pendingTimelineReservations.isEmpty,
                                     canRedo:
                                         widget
                                             .sequenceHistoryController
                                             .canRedo &&
                                         _activeVisualAddFlights == 0 &&
+                                        _activeVisualRemovals == 0 &&
                                         _pendingTimelineReservations.isEmpty,
                                     onUndo: _undoTimelineEdit,
                                     onRedo: _redoTimelineEdit,
@@ -655,7 +663,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                                                 'clear-all-button',
                                               ),
                                               onPressed:
-                                                  _clearAllTimelineAnimations,
+                                                  _activeVisualRemovals == 0
+                                                  ? _clearAllTimelineAnimations
+                                                  : null,
                                               icon: const Icon(
                                                 Icons.refresh_rounded,
                                                 size: 16,
@@ -695,6 +705,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                               steps: _visualTimelineSteps,
                               pendingReservations: _pendingTimelineReservations,
                               openPlaceholderHandle: _openPlaceholderHandle,
+                              removalTransition: _timelineRemovalTransition,
                               requiredNextPosition:
                                   _visibleRequiredNextPosition(
                                     visibleAnimations,

@@ -1,11 +1,14 @@
 part of '../../screens/sequence_builder_screen.dart';
 
+const _timelineRemovalDuration = Duration(milliseconds: 360);
+
 class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
     super.key,
     required this.steps,
     required this.pendingReservations,
     required this.openPlaceholderHandle,
+    required this.removalTransition,
     required this.requiredNextPosition,
     required this.onRemoveAt,
     required this.onItemTap,
@@ -17,6 +20,7 @@ class _TimelineSection extends StatefulWidget {
   final List<_TimelineVisualStep> steps;
   final List<_PendingTimelineReservation> pendingReservations;
   final _TimelinePlaceholderHandle openPlaceholderHandle;
+  final _TimelineRemovalTransition? removalTransition;
   final String requiredNextPosition;
   final void Function(int index) onRemoveAt;
   final ValueChanged<AnimationLibraryItem> onItemTap;
@@ -33,7 +37,11 @@ class _TimelineSectionState extends State<_TimelineSection> {
     final segments = <_TimelineRailSegmentData>[];
     var top = 0.0;
 
-    for (final step in widget.steps) {
+    final removalTransition = widget.removalTransition;
+    final visibleRailSteps = removalTransition?.isRemovingContent == true
+        ? widget.steps.take(removalTransition!.firstRemovedIndex)
+        : widget.steps;
+    for (final step in visibleRailSteps) {
       segments.add(
         _TimelineRailSegmentData(
           id: 'connection-${step.id}',
@@ -64,6 +72,19 @@ class _TimelineSectionState extends State<_TimelineSection> {
         ),
       );
       top += _TimelineRail.positionToPositionExtent;
+    }
+
+    if (removalTransition?.isRemovingContent == true) {
+      segments.add(
+        _TimelineRailSegmentData(
+          id: 'connection-${removalTransition!.replacementPlaceholderHandle.id}',
+          top: top,
+          extent: _TimelineRail.positionToPlaceholderExtent,
+          animateOnMount: false,
+          delay: Duration.zero,
+        ),
+      );
+      return segments;
     }
 
     final terminalHandle = pendingReservations.isEmpty
@@ -112,6 +133,14 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 key: ValueKey('timeline-step-${widget.steps[index].id}'),
                 index: index,
                 step: widget.steps[index],
+                isRemoving:
+                    widget.removalTransition?.isRemovingContent == true &&
+                    index >= widget.removalTransition!.firstRemovedIndex,
+                morphsToPlaceholder:
+                    widget.removalTransition?.isRemovingContent == true &&
+                    index == widget.removalTransition!.firstRemovedIndex,
+                replacementPlaceholderHandle:
+                    widget.removalTransition?.replacementPlaceholderHandle,
                 onRemove: () => widget.onRemoveAt(index),
                 onTap: () => widget.onItemTap(widget.steps[index].item),
                 resolvePreviewPath: widget.resolvePreviewPath,
@@ -131,6 +160,8 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 requiredPosition: pendingReservations[index].item.startPosition,
                 isFirstStep: widget.steps.isEmpty && index == 0,
                 revealDelay: Duration.zero,
+                isRemoving: false,
+                removalCompletion: null,
                 onTap: widget.onAddStep,
               ),
               if (index < pendingReservations.length - 1) ...[
@@ -152,6 +183,9 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 requiredPosition: widget.requiredNextPosition,
                 isFirstStep: widget.steps.isEmpty,
                 revealDelay: _timelinePlaceholderRevealDelay,
+                isRemoving: widget.removalTransition != null,
+                removalCompletion:
+                    widget.removalTransition?.placeholderCompletion,
                 onTap: widget.onAddStep,
               ),
           ],
@@ -447,6 +481,9 @@ class _AnimatedTimelineStepEntry extends StatefulWidget {
     super.key,
     required this.index,
     required this.step,
+    required this.isRemoving,
+    required this.morphsToPlaceholder,
+    required this.replacementPlaceholderHandle,
     required this.onRemove,
     required this.onTap,
     required this.resolvePreviewPath,
@@ -455,6 +492,9 @@ class _AnimatedTimelineStepEntry extends StatefulWidget {
 
   final int index;
   final _TimelineVisualStep step;
+  final bool isRemoving;
+  final bool morphsToPlaceholder;
+  final _TimelinePlaceholderHandle? replacementPlaceholderHandle;
   final VoidCallback onRemove;
   final VoidCallback onTap;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
@@ -477,8 +517,9 @@ class _AnimatedTimelineStepEntryState extends State<_AnimatedTimelineStepEntry>
     _controller = AnimationController(
       vsync: this,
       duration: _insertionDuration,
+      reverseDuration: _timelineRemovalDuration,
       value: widget.step.animateOnMount ? 0 : 1,
-    );
+    )..addStatusListener(_handleStatus);
 
     if (widget.step.animateOnMount) {
       _controller.forward();
@@ -486,8 +527,27 @@ class _AnimatedTimelineStepEntryState extends State<_AnimatedTimelineStepEntry>
   }
 
   @override
+  void didUpdateWidget(covariant _AnimatedTimelineStepEntry oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isRemoving && widget.isRemoving) {
+      _controller.reverse();
+    }
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && widget.isRemoving) {
+      final completion = widget.step.removalCompletion;
+      if (completion != null && !completion.isCompleted) {
+        completion.complete();
+      }
+    }
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    _controller
+      ..removeStatusListener(_handleStatus)
+      ..dispose();
     super.dispose();
   }
 
@@ -505,25 +565,75 @@ class _AnimatedTimelineStepEntryState extends State<_AnimatedTimelineStepEntry>
             ? Curves.easeOut.transform(_interval(insertionProgress, 0.34, 0.64))
             : 1.0;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _TimelineAnimationTile(
-              index: widget.index,
-              item: widget.step.item,
-              insertionProgress: insertionProgress,
-              onRemove: widget.onRemove,
-              onTap: widget.onTap,
-              resolvePreviewPath: widget.resolvePreviewPath,
-              resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
+        final removalSizeFactor = widget.isRemoving
+            ? Curves.easeInOutCubic.transform(
+                (insertionProgress / 0.45).clamp(0.0, 1.0),
+              )
+            : 1.0;
+
+        if (widget.morphsToPlaceholder) {
+          final trailingContentFactor = Curves.easeInOutCubic.transform(
+            (insertionProgress / 0.55).clamp(0.0, 1.0),
+          );
+          final placeholderHandle = widget.replacementPlaceholderHandle!;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DeletingTimelineTileToPlaceholder(
+                index: widget.index,
+                item: widget.step.item,
+                progress: insertionProgress,
+                placeholderHandle: placeholderHandle,
+                resolvePreviewPath: widget.resolvePreviewPath,
+                resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
+              ),
+              ClipRect(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: trailingContentFactor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 6),
+                      _AnimatedTimelinePositionNode(
+                        value: widget.step.item.endPosition,
+                        progress: positionReveal,
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.topCenter,
+            heightFactor: removalSizeFactor,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TimelineAnimationTile(
+                  index: widget.index,
+                  item: widget.step.item,
+                  insertionProgress: insertionProgress,
+                  onRemove: widget.onRemove,
+                  onTap: widget.onTap,
+                  resolvePreviewPath: widget.resolvePreviewPath,
+                  resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
+                ),
+                const SizedBox(height: 6),
+                _AnimatedTimelinePositionNode(
+                  value: widget.step.item.endPosition,
+                  progress: positionReveal,
+                ),
+                const SizedBox(height: 6),
+              ],
             ),
-            const SizedBox(height: 6),
-            _AnimatedTimelinePositionNode(
-              value: widget.step.item.endPosition,
-              progress: positionReveal,
-            ),
-            const SizedBox(height: 6),
-          ],
+          ),
         );
       },
     );
@@ -538,6 +648,8 @@ class _RevealingAddTimelineStep extends StatefulWidget {
     required this.requiredPosition,
     required this.isFirstStep,
     required this.revealDelay,
+    required this.isRemoving,
+    required this.removalCompletion,
     required this.onTap,
   });
 
@@ -546,6 +658,8 @@ class _RevealingAddTimelineStep extends StatefulWidget {
   final String requiredPosition;
   final bool isFirstStep;
   final Duration revealDelay;
+  final bool isRemoving;
+  final Completer<void>? removalCompletion;
   final VoidCallback onTap;
 
   @override
@@ -567,7 +681,7 @@ class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
       vsync: this,
       duration: _revealDuration,
       value: widget.handle.animateOnMount ? 0 : 1,
-    );
+    )..addStatusListener(_handleStatus);
 
     if (widget.handle.animateOnMount) {
       _startReveal(widget.revealDelay);
@@ -578,10 +692,25 @@ class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
   void didUpdateWidget(covariant _RevealingAddTimelineStep oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (!oldWidget.isRemoving && widget.isRemoving) {
+      _revealTimer?.cancel();
+      _controller.reverse();
+      return;
+    }
+
     if (oldWidget.revealDelay > Duration.zero &&
         widget.revealDelay == Duration.zero &&
         !_controller.isCompleted) {
       _startReveal(Duration.zero);
+    }
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && widget.isRemoving) {
+      final completion = widget.removalCompletion;
+      if (completion != null && !completion.isCompleted) {
+        completion.complete();
+      }
     }
   }
 
@@ -600,7 +729,9 @@ class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
   @override
   void dispose() {
     _revealTimer?.cancel();
-    _controller.dispose();
+    _controller
+      ..removeStatusListener(_handleStatus)
+      ..dispose();
     super.dispose();
   }
 
@@ -746,6 +877,251 @@ class _AddTimelineStep extends StatelessWidget {
                 );
               },
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
+  const _DeletingTimelineTileToPlaceholder({
+    required this.index,
+    required this.item,
+    required this.progress,
+    required this.placeholderHandle,
+    required this.resolvePreviewPath,
+    required this.resolveCachedPreviewPath,
+  });
+
+  static const double _previewCutProgress = 0.32;
+  static const double _textHandoffProgress = 0.14;
+
+  final int index;
+  final AnimationLibraryItem item;
+  final double progress;
+  final _TimelinePlaceholderHandle placeholderHandle;
+  final Future<String?> Function(String? previewPath) resolvePreviewPath;
+  final String? Function(String? previewPath) resolveCachedPreviewPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final showsPlaceholderPreview = progress <= _previewCutProgress;
+    final previewProgress = Curves.easeOut.transform(
+      ((progress - 0.02) / 0.46).clamp(0.0, 1.0),
+    );
+    final previewScale = switch (previewProgress) {
+      < 0.38 => 0.45 + (1.12 - 0.45) * (previewProgress / 0.38),
+      < 0.68 => 1.12 - 0.16 * ((previewProgress - 0.38) / 0.30),
+      _ => 0.96 + 0.04 * ((previewProgress - 0.68) / 0.32),
+    };
+    final previewRotation =
+        math.sin(previewProgress * math.pi * 3) * (1 - previewProgress) * 0.055;
+    final plusPhase = ((_previewCutProgress - progress) / _previewCutProgress)
+        .clamp(0.0, 1.0);
+    final plusWobble = math.sin(plusPhase * math.pi * 3) * (1 - plusPhase);
+    final plusScale = 1 + plusWobble * 0.09;
+    final plusRotation = plusWobble * 0.06;
+
+    final outgoingTextProgress = Curves.easeOutCubic.transform(
+      ((progress - _textHandoffProgress) / 0.38).clamp(0.0, 1.0),
+    );
+    final placeholderTextProgress = Curves.easeOutCubic.transform(
+      ((_textHandoffProgress - progress) / _textHandoffProgress).clamp(
+        0.0,
+        1.0,
+      ),
+    );
+
+    return SizedBox(
+      height: 96,
+      child: Row(
+        children: [
+          _StepNumber(index: index, isPending: showsPlaceholderPreview),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Material(
+              color: Colors.white.withValues(
+                alpha: showsPlaceholderPreview ? 0.035 : 0.06,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(
+                  color: Colors.white.withValues(
+                    alpha: showsPlaceholderPreview ? 0.10 : 0.09,
+                  ),
+                ),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: IgnorePointer(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      if (showsPlaceholderPreview)
+                        Transform.rotate(
+                          angle: plusRotation,
+                          child: Transform.scale(
+                            scale: plusScale,
+                            child: Container(
+                              key: placeholderHandle.flightTargetKey,
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF8F55FF,
+                                ).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFFC8A7FF,
+                                  ).withValues(alpha: 0.38),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.add_rounded,
+                                size: 34,
+                                color: Color(0xFFC8A7FF),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Transform.rotate(
+                          angle: previewRotation,
+                          child: Transform.scale(
+                            scale: previewScale,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: SizedBox(
+                                width: 72,
+                                height: 72,
+                                child: AnimationPreviewFrame(
+                                  previewPath: item.previewPath,
+                                  resolvePreviewPath: resolvePreviewPath,
+                                  resolveCachedPreviewPath:
+                                      resolveCachedPreviewPath,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ClipRect(
+                          child: progress > _textHandoffProgress
+                              ? Opacity(
+                                  opacity: outgoingTextProgress,
+                                  child: Transform.translate(
+                                    offset: Offset(
+                                      -36 * (1 - outgoingTextProgress),
+                                      0,
+                                    ),
+                                    child: _DeletionOutgoingText(item: item),
+                                  ),
+                                )
+                              : Opacity(
+                                  opacity: placeholderTextProgress,
+                                  child: Transform.translate(
+                                    offset: Offset(
+                                      -28 * (1 - placeholderTextProgress),
+                                      0,
+                                    ),
+                                    child: _DeletionPlaceholderText(
+                                      isFirstStep: index == 0,
+                                      requiredPosition: item.startPosition,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DeletionOutgoingText extends StatelessWidget {
+  const _DeletionOutgoingText({required this.item});
+
+  final AnimationLibraryItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                item.animationName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.56),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Icon(
+          Icons.delete_outline_rounded,
+          size: 20,
+          color: Colors.white.withValues(alpha: 0.72),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeletionPlaceholderText extends StatelessWidget {
+  const _DeletionPlaceholderText({
+    required this.isFirstStep,
+    required this.requiredPosition,
+  });
+
+  final bool isFirstStep;
+  final String requiredPosition;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          isFirstStep ? 'Add first animation' : 'Add next animation',
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          requiredPosition == 'Any'
+              ? 'Any start position'
+              : 'Required start: $requiredPosition',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.60),
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],

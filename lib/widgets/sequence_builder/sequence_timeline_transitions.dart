@@ -1,6 +1,109 @@
 part of '../../screens/sequence_builder_screen.dart';
 
 extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
+  Future<void> _playTimelineRemoval(SequenceMutation mutation) async {
+    final firstRemovedIndex = mutation.commonPrefixLength;
+    if (_activeVisualRemovals > 0 ||
+        firstRemovedIndex >= _visualTimelineSteps.length) {
+      _updateTimelineState(_syncVisualTimelineWithController);
+      return;
+    }
+
+    _activeVisualRemovals++;
+    final firstRemovedStep = _visualTimelineSteps[firstRemovedIndex];
+    final transition = _TimelineRemovalTransition(
+      firstRemovedIndex: firstRemovedIndex,
+      replacementPlaceholderHandle: _TimelinePlaceholderHandle(
+        id: firstRemovedStep.id,
+        animateOnMount: false,
+      ),
+    );
+    final removalScroll = _scrollTimelineForRemoval(
+      _visualTimelineSteps.length - firstRemovedIndex,
+    );
+    final removalCompletions = <Completer<void>>[];
+    _updateTimelineState(() {
+      _cancelPendingTimelineReservations();
+      _timelineRemovalTransition = transition;
+      _visualTimelineSteps = [
+        for (var index = 0; index < _visualTimelineSteps.length; index++)
+          if (index < firstRemovedIndex)
+            _visualTimelineSteps[index]
+          else
+            _TimelineVisualStep(
+              id: _visualTimelineSteps[index].id,
+              item: _visualTimelineSteps[index].item,
+              animateOnMount: false,
+              animatePositionOnMount: true,
+              removalCompletion: () {
+                final completion = Completer<void>();
+                removalCompletions.add(completion);
+                return completion;
+              }(),
+            ),
+      ];
+    });
+    unawaited(HapticFeedback.mediumImpact());
+
+    try {
+      final oldPlaceholderHidden = transition.placeholderCompletion.future
+          .timeout(const Duration(milliseconds: 300), onTimeout: () {});
+      if (removalCompletions.isNotEmpty) {
+        await Future.wait([
+          oldPlaceholderHidden,
+          removalScroll,
+          ...removalCompletions.map((item) => item.future),
+        ]);
+      } else {
+        await Future.wait([oldPlaceholderHidden, removalScroll]);
+      }
+      if (!mounted) return;
+
+      _updateTimelineState(() {
+        _visualTimelineSteps.removeRange(
+          firstRemovedIndex,
+          _visualTimelineSteps.length,
+        );
+        _openPlaceholderHandle = transition.replacementPlaceholderHandle;
+        _lastClaimedPlaceholderHandle = null;
+        _timelineRemovalTransition = null;
+      });
+    } finally {
+      _activeVisualRemovals--;
+      _updateTimelineState(() {});
+    }
+  }
+
+  Future<void> _scrollTimelineForRemoval(int removedStepCount) async {
+    if (!_timelineScrollController.hasClients || removedStepCount <= 0) return;
+
+    _timelineScrollRequestVersionState =
+        (_timelineScrollRequestVersionState ?? 0) + 1;
+    final position = _timelineScrollController.position;
+    final predictedFinalMaximum = math.max(
+      position.minScrollExtent,
+      position.maxScrollExtent -
+          removedStepCount * _TimelineRail.positionToPositionExtent,
+    );
+    const deletionScrollSafetyMargin = 20.0;
+    final targetOffset = math.max(
+      position.minScrollExtent,
+      predictedFinalMaximum - deletionScrollSafetyMargin,
+    );
+
+    if (_timelineScrollController.offset <= targetOffset + 0.5) return;
+
+    try {
+      await _timelineScrollController.animateTo(
+        targetOffset,
+        duration: _timelineRemovalDuration,
+        curve: Curves.easeInOutCubic,
+      );
+    } catch (_) {
+      // A newer timeline transition intentionally replaces this scroll.
+    }
+  }
+
   Offset? _projectLandingTarget({
     required _TimelinePlaceholderHandle baseHandle,
     required double slotOffset,
@@ -281,6 +384,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     LibraryDisplayItem entry, {
     Size? flightSize,
   }) async {
+    if (_activeVisualRemovals > 0) return;
+
     if (widget.libraryController.requiresDownload(entry)) {
       await _handlePrimaryAction(entry);
       return;
