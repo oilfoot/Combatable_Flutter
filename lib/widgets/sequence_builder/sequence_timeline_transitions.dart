@@ -74,6 +74,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     } finally {
       _activeVisualRemovals--;
       _updateTimelineState(() {});
+      _drainQueuedHistoryActions();
     }
   }
 
@@ -326,18 +327,21 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
 
     final isBulkRestore = insertedItems.length > 1;
     if (isBulkRestore) {
+      _activeBulkRestores++;
       _updateTimelineState(() {
         _bulkRestoreReservedExtent =
             insertedItems.length * _TimelineRail.positionToPositionExtent;
       });
       await WidgetsBinding.instance.endOfFrame;
-      unawaited(_scrollTimelineForBulkRestore());
     }
 
     final waveMilliseconds = (140 + insertedItems.length * 22).clamp(
       _bulkRestoreMinimumWaveMilliseconds,
       _bulkRestoreMaximumWaveMilliseconds,
     );
+    if (isBulkRestore) {
+      unawaited(_scrollTimelineForBulkRestore(waveMilliseconds));
+    }
     final playbacks = <Future<void>>[];
 
     for (var index = 0; index < insertedItems.length; index++) {
@@ -365,10 +369,12 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
       _updateTimelineState(() {
         _bulkRestoreReservedExtent = 0;
       });
+      if (isBulkRestore) _activeBulkRestores--;
+      _drainQueuedHistoryActions();
     }
   }
 
-  Future<void> _scrollTimelineForBulkRestore() async {
+  Future<void> _scrollTimelineForBulkRestore(int waveMilliseconds) async {
     if (!_timelineScrollController.hasClients) return;
 
     final position = _timelineScrollController.position;
@@ -378,8 +384,10 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     try {
       await _timelineScrollController.animateTo(
         targetOffset,
-        duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
+        duration: Duration(
+          milliseconds: (waveMilliseconds + 320).clamp(560, 820),
+        ),
+        curve: Curves.easeInOutCubic,
       );
     } catch (_) {
       // The growing timeline may retarget the active scroll position.
@@ -481,6 +489,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
       );
       await HapticFeedback.heavyImpact();
     }
+    _drainQueuedHistoryActions();
   }
 
   Future<void> _animateAndAdd(
@@ -551,6 +560,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
       if (!arrival.isCompleted) arrival.complete();
       _activeVisualAddFlights--;
       _updateTimelineState(() {});
+      _drainQueuedHistoryActions();
     }
   }
 
@@ -584,6 +594,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     } finally {
       _activeVisualAddFlights--;
       _updateTimelineState(() {});
+      _drainQueuedHistoryActions();
     }
   }
 

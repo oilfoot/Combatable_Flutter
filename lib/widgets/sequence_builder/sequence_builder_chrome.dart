@@ -81,11 +81,23 @@ class _SequenceHeader extends StatelessWidget {
     required this.sequenceNameController,
     required this.onNameChanged,
     required this.onBuildUnitySequence,
+    required this.canUndo,
+    required this.canRedo,
+    required this.canClear,
+    required this.onUndo,
+    required this.onRedo,
+    required this.onClear,
   });
 
   final TextEditingController sequenceNameController;
   final ValueChanged<String> onNameChanged;
   final Future<void> Function() onBuildUnitySequence;
+  final bool canUndo;
+  final bool canRedo;
+  final bool canClear;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +180,54 @@ class _SequenceHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Timeline',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                _TimelineHistoryControls(
+                  canUndo: canUndo,
+                  canRedo: canRedo,
+                  onUndo: onUndo,
+                  onRedo: onRedo,
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: canClear ? onClear : null,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Clear All'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFC8A7FF),
+                      disabledForegroundColor: Colors.white.withValues(
+                        alpha: 0.20,
+                      ),
+                      backgroundColor: const Color(
+                        0xFF8F55FF,
+                      ).withValues(alpha: canClear ? 0.07 : 0.015),
+                      side: BorderSide(
+                        color: canClear
+                            ? const Color(0xFFC8A7FF).withValues(alpha: 0.26)
+                            : Colors.white.withValues(alpha: 0.07),
+                      ),
+                      minimumSize: const Size(0, 34),
+                      padding: const EdgeInsets.symmetric(horizontal: 11),
+                      shape: const StadiumBorder(),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

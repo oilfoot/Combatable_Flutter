@@ -20,6 +20,9 @@ part '../widgets/sequence_builder/sequence_builder_chrome.dart';
 const _timelinePlaceholderRevealDelay = Duration(milliseconds: 324);
 const double _timelinePostRevealBottomClearance = 32;
 const double _timelinePostRevealOverflowThreshold = 4;
+const double _sequenceControlsHeaderExtent = 220;
+
+enum _QueuedHistoryAction { undo, redo }
 
 class SequenceBuilderScreen extends StatefulWidget {
   const SequenceBuilderScreen({
@@ -143,7 +146,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   int _nextTransitionId = 0;
   int _activeVisualAddFlights = 0;
   int _activeVisualRemovals = 0;
+  int _activeBulkRestores = 0;
   double _bulkRestoreReservedExtent = 0;
+  double _controlsHeaderTop = 0;
+  bool _isControlsHeaderFloating = false;
+  final List<_QueuedHistoryAction> _queuedHistoryActions = [];
   final Map<String, _TimelineInsertionTransition> _flightTransitions = {};
   _TimelineRemovalTransition? _timelineRemovalTransition;
   StreamSubscription<SequenceMutation>? _sequenceMutationSubscription;
@@ -244,6 +251,52 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     if (mounted) setState(() {});
   }
 
+  bool _handleTimelineScrollNotification(ScrollNotification notification) {
+    if (notification is! ScrollUpdateNotification) {
+      return false;
+    }
+
+    final pixels = math.max(0.0, notification.metrics.pixels);
+    final scrollDelta = notification.scrollDelta ?? 0;
+    var nextTop = _controlsHeaderTop;
+    var nextFloating = _isControlsHeaderFloating;
+
+    if (pixels <= 1) {
+      nextTop = 0;
+      nextFloating = false;
+    } else if (!nextFloating && pixels < _sequenceControlsHeaderExtent) {
+      nextTop = -pixels;
+    } else {
+      final directUpwardDrag =
+          notification.dragDetails != null && scrollDelta < 0;
+      if (!nextFloating && directUpwardDrag) {
+        nextFloating = true;
+      }
+
+      if (nextFloating) {
+        nextTop = (nextTop - scrollDelta).clamp(
+          -_sequenceControlsHeaderExtent,
+          0.0,
+        );
+        if (nextTop <= -_sequenceControlsHeaderExtent && scrollDelta > 0) {
+          nextFloating = false;
+        }
+      } else {
+        nextTop = -_sequenceControlsHeaderExtent;
+      }
+    }
+
+    if (nextTop != _controlsHeaderTop ||
+        nextFloating != _isControlsHeaderFloating) {
+      setState(() {
+        _controlsHeaderTop = nextTop;
+        _isControlsHeaderFloating = nextFloating;
+      });
+    }
+
+    return false;
+  }
+
   void _updateTimelineState(VoidCallback update) {
     if (mounted) setState(update);
   }
@@ -331,11 +384,53 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     _pendingTimelineReservations.clear();
   }
 
+  bool get _isTimelineTransitionBusy =>
+      _activeVisualAddFlights > 0 ||
+      _activeVisualRemovals > 0 ||
+      _activeBulkRestores > 0 ||
+      _pendingTimelineReservations.isNotEmpty;
+
+  void _queueHistoryAction(_QueuedHistoryAction action) {
+    if (_queuedHistoryActions.length >= 10) return;
+    _queuedHistoryActions.add(action);
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _drainQueuedHistoryActions() {
+    if (!mounted ||
+        _isTimelineTransitionBusy ||
+        _queuedHistoryActions.isEmpty) {
+      return;
+    }
+
+    final action = _queuedHistoryActions.removeAt(0);
+    scheduleMicrotask(() {
+      if (!mounted) return;
+      switch (action) {
+        case _QueuedHistoryAction.undo:
+          if (widget.sequenceHistoryController.canUndo) {
+            _undoTimelineEdit();
+          } else {
+            _drainQueuedHistoryActions();
+          }
+          return;
+        case _QueuedHistoryAction.redo:
+          if (widget.sequenceHistoryController.canRedo) {
+            _redoTimelineEdit();
+          } else {
+            _drainQueuedHistoryActions();
+          }
+          return;
+      }
+    });
+  }
+
   void _undoTimelineEdit() {
-    if (!widget.sequenceHistoryController.canUndo ||
-        _activeVisualAddFlights > 0 ||
-        _activeVisualRemovals > 0 ||
-        _pendingTimelineReservations.isNotEmpty) {
+    if (!widget.sequenceHistoryController.canUndo) {
+      return;
+    }
+    if (_isTimelineTransitionBusy) {
+      _queueHistoryAction(_QueuedHistoryAction.undo);
       return;
     }
 
@@ -344,10 +439,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   }
 
   void _redoTimelineEdit() {
-    if (!widget.sequenceHistoryController.canRedo ||
-        _activeVisualAddFlights > 0 ||
-        _activeVisualRemovals > 0 ||
-        _pendingTimelineReservations.isNotEmpty) {
+    if (!widget.sequenceHistoryController.canRedo) {
+      return;
+    }
+    if (_isTimelineTransitionBusy) {
+      _queueHistoryAction(_QueuedHistoryAction.redo);
       return;
     }
 
@@ -599,156 +695,66 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Column(
-                children: [
-                  _SequenceHeader(
-                    sequenceNameController: _sequenceNameController,
-                    onNameChanged: sequence.setSequenceName,
-                    onBuildUnitySequence: widget.onBuildUnitySequence,
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTap: () => _setLibraryPanelState(
-                        SequenceBuilderLibraryPanelState.fullyCollapsed,
-                      ),
-                      child: SingleChildScrollView(
-                        key: _timelineViewportKey,
-                        controller: _timelineScrollController,
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          14,
-                          16,
-                          timelineBottomPadding,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              height: 40,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      'Timeline',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                  _TimelineHistoryControls(
-                                    canUndo:
-                                        widget
-                                            .sequenceHistoryController
-                                            .canUndo &&
-                                        _activeVisualAddFlights == 0 &&
-                                        _activeVisualRemovals == 0 &&
-                                        _pendingTimelineReservations.isEmpty,
-                                    canRedo:
-                                        widget
-                                            .sequenceHistoryController
-                                            .canRedo &&
-                                        _activeVisualAddFlights == 0 &&
-                                        _activeVisualRemovals == 0 &&
-                                        _pendingTimelineReservations.isEmpty,
-                                    onUndo: _undoTimelineEdit,
-                                    onRedo: _redoTimelineEdit,
-                                  ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: AnimatedSwitcher(
-                                      duration: const Duration(
-                                        milliseconds: 160,
-                                      ),
-                                      switchInCurve: Curves.easeOutCubic,
-                                      switchOutCurve: Curves.easeInCubic,
-                                      transitionBuilder: (child, animation) {
-                                        return FadeTransition(
-                                          opacity: animation,
-                                          child: ScaleTransition(
-                                            scale: Tween<double>(
-                                              begin: 0.96,
-                                              end: 1,
-                                            ).animate(animation),
-                                            child: child,
-                                          ),
-                                        );
-                                      },
-                                      child: visibleAnimations.isEmpty
-                                          ? const SizedBox(
-                                              key: ValueKey(
-                                                'clear-all-placeholder',
-                                              ),
-                                            )
-                                          : OutlinedButton.icon(
-                                              key: const ValueKey(
-                                                'clear-all-button',
-                                              ),
-                                              onPressed:
-                                                  _activeVisualRemovals == 0
-                                                  ? _clearAllTimelineAnimations
-                                                  : null,
-                                              icon: const Icon(
-                                                Icons.refresh_rounded,
-                                                size: 16,
-                                              ),
-                                              label: const Text('Clear All'),
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor: const Color(
-                                                  0xFFC8A7FF,
-                                                ),
-                                                backgroundColor: const Color(
-                                                  0xFF8F55FF,
-                                                ).withValues(alpha: 0.07),
-                                                side: BorderSide(
-                                                  color: const Color(
-                                                    0xFFC8A7FF,
-                                                  ).withValues(alpha: 0.26),
-                                                ),
-                                                minimumSize: const Size(0, 34),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 11,
-                                                    ),
-                                                shape: const StadiumBorder(),
-                                                tapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                              ),
-                                            ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => _setLibraryPanelState(
+                  SequenceBuilderLibraryPanelState.fullyCollapsed,
+                ),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _handleTimelineScrollNotification,
+                  child: SingleChildScrollView(
+                    key: _timelineViewportKey,
+                    controller: _timelineScrollController,
+                    padding: EdgeInsets.only(bottom: timelineBottomPadding),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: _sequenceControlsHeaderExtent),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                          child: _TimelineSection(
+                            key: _timelineTargetKey,
+                            steps: _visualTimelineSteps,
+                            pendingReservations: _pendingTimelineReservations,
+                            openPlaceholderHandle: _openPlaceholderHandle,
+                            removalTransition: _timelineRemovalTransition,
+                            requiredNextPosition: _visibleRequiredNextPosition(
+                              visibleAnimations,
                             ),
-                            const SizedBox(height: 12),
-                            _TimelineSection(
-                              key: _timelineTargetKey,
-                              steps: _visualTimelineSteps,
-                              pendingReservations: _pendingTimelineReservations,
-                              openPlaceholderHandle: _openPlaceholderHandle,
-                              removalTransition: _timelineRemovalTransition,
-                              requiredNextPosition:
-                                  _visibleRequiredNextPosition(
-                                    visibleAnimations,
-                                  ),
-                              onRemoveAt: _removeTimelineAnimationAt,
-                              onItemTap: _showTimelineAnimationInfo,
-                              onAddStep: _expandLibrary,
-                              resolvePreviewPath:
-                                  widget.libraryController.getOrDownloadPreview,
-                              resolveCachedPreviewPath:
-                                  widget.libraryController.getCachedPreviewPath,
-                            ),
-                          ],
+                            onRemoveAt: _removeTimelineAnimationAt,
+                            onItemTap: _showTimelineAnimationInfo,
+                            onAddStep: _expandLibrary,
+                            resolvePreviewPath:
+                                widget.libraryController.getOrDownloadPreview,
+                            resolveCachedPreviewPath:
+                                widget.libraryController.getCachedPreviewPath,
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: _controlsHeaderTop,
+              left: 0,
+              right: 0,
+              height: _sequenceControlsHeaderExtent,
+              child: ColoredBox(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: _SequenceHeader(
+                  sequenceNameController: _sequenceNameController,
+                  onNameChanged: sequence.setSequenceName,
+                  onBuildUnitySequence: widget.onBuildUnitySequence,
+                  canUndo: widget.sequenceHistoryController.canUndo,
+                  canRedo: widget.sequenceHistoryController.canRedo,
+                  canClear:
+                      visibleAnimations.isNotEmpty &&
+                      _activeVisualRemovals == 0,
+                  onUndo: _undoTimelineEdit,
+                  onRedo: _redoTimelineEdit,
+                  onClear: _clearAllTimelineAnimations,
+                ),
               ),
             ),
             Positioned.fill(

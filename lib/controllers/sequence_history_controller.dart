@@ -64,6 +64,8 @@ class SequenceHistoryController extends ChangeNotifier {
   Stream<SequenceMutation> get mutations => _mutations.stream;
   bool get canUndo => _undoHistory.isNotEmpty;
   bool get canRedo => _redoHistory.isNotEmpty;
+  int get undoDepth => _undoHistory.length;
+  int get redoDepth => _redoHistory.length;
 
   bool addAnimation(AnimationLibraryItem item, {String? transitionId}) {
     if (!_sequenceController.canAddAnimation(item)) return false;
