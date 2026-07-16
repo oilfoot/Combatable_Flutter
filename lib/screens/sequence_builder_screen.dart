@@ -253,28 +253,37 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
   void _syncVisualTimelineWithController() {
     final logicalAnimations = widget.sequenceController.selectedAnimations;
+    final sharedLength = math.min(
+      logicalAnimations.length,
+      _visualTimelineSteps.length,
+    );
+    var commonPrefixLength = 0;
+    while (commonPrefixLength < sharedLength &&
+        identical(
+          logicalAnimations[commonPrefixLength],
+          _visualTimelineSteps[commonPrefixLength].item,
+        )) {
+      commonPrefixLength++;
+    }
     final alreadySynchronized =
         logicalAnimations.length == _visualTimelineSteps.length &&
-        List.generate(
-          logicalAnimations.length,
-          (index) => identical(
-            logicalAnimations[index],
-            _visualTimelineSteps[index].item,
-          ),
-        ).every((matches) => matches);
+        commonPrefixLength == logicalAnimations.length;
 
     if (alreadySynchronized) return;
 
-    _visualTimelineSteps = logicalAnimations
-        .map(
-          (item) => _TimelineVisualStep(
-            id: _takeTimelineSlotId(),
-            item: item,
-            animateOnMount: false,
-            animatePositionOnMount: false,
+    _visualTimelineSteps = [
+      ..._visualTimelineSteps.take(commonPrefixLength),
+      ...logicalAnimations
+          .skip(commonPrefixLength)
+          .map(
+            (item) => _TimelineVisualStep(
+              id: _takeTimelineSlotId(),
+              item: item,
+              animateOnMount: false,
+              animatePositionOnMount: false,
+            ),
           ),
-        )
-        .toList();
+    ];
     _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: false);
     _lastClaimedPlaceholderHandle = null;
   }

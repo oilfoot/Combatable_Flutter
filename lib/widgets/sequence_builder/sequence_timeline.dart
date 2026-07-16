@@ -29,68 +29,66 @@ class _TimelineSection extends StatefulWidget {
 }
 
 class _TimelineSectionState extends State<_TimelineSection> {
-  static const double _baseRailHeight = 68;
-  static const double _stepRailHeight = 136;
-  static const _arrivalRailDelay = Duration(milliseconds: 202);
+  List<_TimelineRailSegmentData> _buildRailSegments() {
+    final segments = <_TimelineRailSegmentData>[];
+    var top = 0.0;
 
-  double? _railHeight;
-  double? _requestedRailHeight;
-  int? _lastPendingReservationCount;
-  Timer? _railDelayTimer;
-
-  double _targetRailHeight(_TimelineSection timeline) {
-    final railSteps =
-        timeline.steps.length +
-        math.max(0, timeline.pendingReservations.length - 1);
-    return _baseRailHeight + _stepRailHeight * railSteps;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _railHeight = _targetRailHeight(widget);
-    _requestedRailHeight = _railHeight;
-    _lastPendingReservationCount = widget.pendingReservations.length;
-  }
-
-  @override
-  void didUpdateWidget(covariant _TimelineSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    final newTarget = _targetRailHeight(widget);
-    final oldTarget = _requestedRailHeight ?? _railHeight ?? newTarget;
-    final newPendingCount = widget.pendingReservations.length;
-    final oldPendingCount = _lastPendingReservationCount ?? newPendingCount;
-
-    _requestedRailHeight = newTarget;
-    _lastPendingReservationCount = newPendingCount;
-    if (newTarget == oldTarget) return;
-
-    _railDelayTimer?.cancel();
-    if (newTarget < oldTarget || newPendingCount > oldPendingCount) {
-      _railHeight = newTarget;
-      return;
+    for (final step in widget.steps) {
+      segments.add(
+        _TimelineRailSegmentData(
+          id: 'connection-${step.id}',
+          top: top,
+          extent: _TimelineRail.positionToPositionExtent,
+          animateOnMount: step.animateOnMount,
+          delay: step.animateOnMount
+              ? const Duration(milliseconds: 202)
+              : Duration.zero,
+        ),
+      );
+      top += _TimelineRail.positionToPositionExtent;
     }
 
-    _railDelayTimer = Timer(_arrivalRailDelay, () {
-      if (!mounted) return;
-      setState(() {
-        _railHeight = newTarget;
-      });
-    });
-  }
+    final pendingReservations = widget.pendingReservations;
+    for (
+      var index = 0;
+      index < math.max(0, pendingReservations.length - 1);
+      index++
+    ) {
+      segments.add(
+        _TimelineRailSegmentData(
+          id: 'connection-${pendingReservations[index].handle.id}',
+          top: top,
+          extent: _TimelineRail.positionToPositionExtent,
+          animateOnMount: true,
+          delay: Duration.zero,
+        ),
+      );
+      top += _TimelineRail.positionToPositionExtent;
+    }
 
-  @override
-  void dispose() {
-    _railDelayTimer?.cancel();
-    super.dispose();
+    final terminalHandle = pendingReservations.isEmpty
+        ? widget.openPlaceholderHandle
+        : pendingReservations.last.handle;
+    segments.add(
+      _TimelineRailSegmentData(
+        id: 'connection-${terminalHandle.id}',
+        top: top,
+        extent: _TimelineRail.positionToPlaceholderExtent,
+        animateOnMount: terminalHandle.animateOnMount,
+        delay: pendingReservations.isNotEmpty
+            ? Duration.zero
+            : terminalHandle.animateOnMount
+            ? _timelinePlaceholderRevealDelay
+            : Duration.zero,
+      ),
+    );
+
+    return segments;
   }
 
   @override
   Widget build(BuildContext context) {
     final pendingReservations = widget.pendingReservations;
-    _requestedRailHeight ??= _targetRailHeight(widget);
-    _lastPendingReservationCount ??= pendingReservations.length;
     final firstPosition = widget.steps.isNotEmpty
         ? widget.steps.first.item.startPosition
         : pendingReservations.isNotEmpty
@@ -102,13 +100,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
         Positioned(
           left: 13.5,
           top: 14,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeInOutCubic,
-            width: 1,
-            height: _railHeight ??= _targetRailHeight(widget),
-            color: Colors.white.withOpacity(0.14),
-          ),
+          child: _TimelineRail(segments: _buildRailSegments()),
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,6 +157,262 @@ class _TimelineSectionState extends State<_TimelineSection> {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _TimelineRailSegmentData {
+  const _TimelineRailSegmentData({
+    required this.id,
+    required this.top,
+    required this.extent,
+    required this.animateOnMount,
+    required this.delay,
+  });
+
+  final String id;
+  final double top;
+  final double extent;
+  final bool animateOnMount;
+  final Duration delay;
+}
+
+class _DisplayedTimelineRailSegment {
+  _DisplayedTimelineRailSegment({required this.data, required this.isPresent});
+
+  _TimelineRailSegmentData data;
+  bool isPresent;
+}
+
+class _TimelineRail extends StatefulWidget {
+  const _TimelineRail({required this.segments});
+
+  static const double positionToPositionExtent = 136;
+  static const double positionToPlaceholderExtent = 68;
+
+  final List<_TimelineRailSegmentData> segments;
+
+  @override
+  State<_TimelineRail> createState() => _TimelineRailState();
+}
+
+class _TimelineRailState extends State<_TimelineRail> {
+  late final List<_DisplayedTimelineRailSegment> _displayedSegments;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayedSegments = [
+      for (var index = 0; index < widget.segments.length; index++)
+        _DisplayedTimelineRailSegment(
+          data: widget.segments[index],
+          isPresent: true,
+        ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimelineRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final nextById = {
+      for (var index = 0; index < widget.segments.length; index++)
+        widget.segments[index].id: widget.segments[index],
+    };
+    final displayedById = {
+      for (final segment in _displayedSegments) segment.data.id: segment,
+    };
+
+    for (final displayed in _displayedSegments) {
+      final next = nextById[displayed.data.id];
+      if (next == null) {
+        displayed.isPresent = false;
+      } else {
+        displayed
+          ..data = next
+          ..isPresent = true;
+      }
+    }
+
+    for (final next in nextById.values) {
+      if (displayedById.containsKey(next.id)) continue;
+      _displayedSegments.add(
+        _DisplayedTimelineRailSegment(data: next, isPresent: true),
+      );
+    }
+  }
+
+  void _removeDismissedSegment(String id) {
+    if (!mounted || widget.segments.any((segment) => segment.id == id)) return;
+    setState(() {
+      _displayedSegments.removeWhere((segment) => segment.data.id == id);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final railHeight = _displayedSegments.fold<double>(
+      0,
+      (height, segment) =>
+          math.max(height, segment.data.top + segment.data.extent),
+    );
+
+    return SizedBox(
+      width: 1,
+      height: railHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final segment in _displayedSegments)
+            Positioned(
+              key: ValueKey('rail-segment-${segment.data.id}'),
+              top: segment.data.top,
+              child: _AnimatedTimelineRailSegment(
+                data: segment.data,
+                isPresent: segment.isPresent,
+                onDismissed: () => _removeDismissedSegment(segment.data.id),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnimatedTimelineRailSegment extends StatefulWidget {
+  const _AnimatedTimelineRailSegment({
+    required this.data,
+    required this.isPresent,
+    required this.onDismissed,
+  });
+
+  final _TimelineRailSegmentData data;
+  final bool isPresent;
+  final VoidCallback onDismissed;
+
+  @override
+  State<_AnimatedTimelineRailSegment> createState() =>
+      _AnimatedTimelineRailSegmentState();
+}
+
+class _AnimatedTimelineRailSegmentState
+    extends State<_AnimatedTimelineRailSegment>
+    with TickerProviderStateMixin {
+  static const _drawDuration = Duration(milliseconds: 320);
+  static const _eraseDuration = Duration(milliseconds: 220);
+
+  late final AnimationController _controller;
+  late final AnimationController _extentController;
+  late Animation<double> _extentAnimation;
+  Timer? _delayTimer;
+  Timer? _extentDelayTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _drawDuration,
+      reverseDuration: _eraseDuration,
+      value: widget.data.animateOnMount ? 0 : 1,
+    )..addStatusListener(_handleStatus);
+    _extentController = AnimationController(
+      vsync: this,
+      duration: _drawDuration,
+    );
+    _extentAnimation = AlwaysStoppedAnimation(widget.data.extent);
+
+    if (widget.data.animateOnMount) {
+      _draw(widget.data.delay);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedTimelineRailSegment oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.data.extent != widget.data.extent) {
+      _extentDelayTimer?.cancel();
+      final delay = widget.data.extent > oldWidget.data.extent
+          ? widget.data.delay
+          : Duration.zero;
+      if (delay == Duration.zero) {
+        _animateExtentTo(widget.data.extent);
+      } else {
+        _extentDelayTimer = Timer(delay, () {
+          if (!mounted) return;
+          _animateExtentTo(widget.data.extent);
+        });
+      }
+    }
+
+    if (oldWidget.isPresent && !widget.isPresent) {
+      _delayTimer?.cancel();
+      _controller.reverse();
+    } else if (!oldWidget.isPresent && widget.isPresent) {
+      _draw(Duration.zero);
+    }
+  }
+
+  void _draw(Duration delay) {
+    _delayTimer?.cancel();
+    if (delay == Duration.zero) {
+      _controller.forward();
+      return;
+    }
+    _delayTimer = Timer(delay, () {
+      if (mounted && widget.isPresent) _controller.forward();
+    });
+  }
+
+  void _animateExtentTo(double extent) {
+    _extentAnimation = Tween<double>(begin: _extentAnimation.value, end: extent)
+        .animate(
+          CurvedAnimation(
+            parent: _extentController,
+            curve: Curves.easeInOutCubic,
+          ),
+        );
+    _extentController.forward(from: 0);
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && !widget.isPresent) {
+      widget.onDismissed();
+    }
+  }
+
+  @override
+  void dispose() {
+    _delayTimer?.cancel();
+    _extentDelayTimer?.cancel();
+    _controller
+      ..removeStatusListener(_handleStatus)
+      ..dispose();
+    _extentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_controller, _extentController]),
+      builder: (context, _) {
+        final progress = Curves.easeInOutCubic.transform(_controller.value);
+        final animatedExtent = _extentAnimation.value;
+        return SizedBox(
+          width: 1,
+          height: math.max(widget.data.extent, animatedExtent),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              width: 1,
+              height: animatedExtent * progress,
+              color: Colors.white.withValues(alpha: 0.14),
+            ),
+          ),
+        );
+      },
     );
   }
 }
