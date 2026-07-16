@@ -1,6 +1,7 @@
 part of '../../screens/sequence_builder_screen.dart';
 
 const _timelineRemovalDuration = Duration(milliseconds: 360);
+const _timelineRailStepDelay = Duration(milliseconds: 202);
 
 class _TimelineSection extends StatefulWidget {
   const _TimelineSection({
@@ -48,9 +49,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
           top: top,
           extent: _TimelineRail.positionToPositionExtent,
           animateOnMount: step.animateOnMount,
-          delay: step.animateOnMount
-              ? const Duration(milliseconds: 202)
-              : Duration.zero,
+          delay: step.animateOnMount ? _timelineRailStepDelay : Duration.zero,
         ),
       );
       top += _TimelineRail.positionToPositionExtent;
@@ -98,8 +97,10 @@ class _TimelineSectionState extends State<_TimelineSection> {
         animateOnMount: terminalHandle.animateOnMount,
         delay: pendingReservations.isNotEmpty
             ? Duration.zero
-            : terminalHandle.animateOnMount && !terminalHandle.revealImmediately
-            ? _timelinePlaceholderRevealDelay
+            : terminalHandle.animateOnMount
+            ? terminalHandle.revealImmediately
+                  ? _timelineRailStepDelay
+                  : _timelinePlaceholderRevealDelay
             : Duration.zero,
       ),
     );

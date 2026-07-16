@@ -251,123 +251,133 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                 ),
                 const SizedBox(height: 4),
                 Expanded(
-                  child: IgnorePointer(
-                    ignoring:
-                        height < SequenceBuilderLibrary.collapsedHeight - 1,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 150),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      layoutBuilder: (currentChild, previousChildren) {
-                        return Stack(
-                          alignment: Alignment.topCenter,
-                          children: [...previousChildren, ?currentChild],
-                        );
-                      },
-                      transitionBuilder: (child, animation) {
-                        return FadeTransition(
-                          opacity: animation,
-                          child: ScaleTransition(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap:
+                        widget.panelState ==
+                            SequenceBuilderLibraryPanelState.fullyCollapsed
+                        ? () => widget.onStateChanged(
+                            SequenceBuilderLibraryPanelState.collapsed,
+                          )
+                        : null,
+                    child: IgnorePointer(
+                      ignoring:
+                          height < SequenceBuilderLibrary.collapsedHeight - 1,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 150),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (currentChild, previousChildren) {
+                          return Stack(
                             alignment: Alignment.topCenter,
-                            scale: Tween<double>(
-                              begin: 0.975,
-                              end: 1,
-                            ).animate(animation),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: widget.items.isEmpty
-                          ? const _EmptyLibraryState(
-                              key: ValueKey('empty-library'),
-                            )
-                          : LayoutBuilder(
-                              key: ValueKey(
-                                widget.items
-                                    .map((entry) => entry.item.animationName)
-                                    .join('|'),
-                              ),
-                              builder: (context, constraints) {
-                                final gridHeight = expandedProgress > 0
-                                    ? constraints.maxHeight
-                                    : constraints.constrainHeight(
-                                        SequenceBuilderLibrary
-                                            .collapsedGridHeight,
-                                      );
-
-                                return Align(
-                                  alignment: Alignment.topLeft,
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    height: gridHeight,
-                                    child: GridView.builder(
-                                      padding: const EdgeInsets.only(
-                                        bottom: AppShell
-                                            .floatingNavExtraScrollSpace,
-                                      ),
-                                      physics: expandedProgress > 0
-                                          ? const BouncingScrollPhysics()
-                                          : const NeverScrollableScrollPhysics(),
-                                      gridDelegate:
-                                          const SliverGridDelegateWithFixedCrossAxisCount(
-                                            crossAxisCount: 3,
-                                            mainAxisSpacing: 12,
-                                            crossAxisSpacing: 12,
-                                            mainAxisExtent:
-                                                SequenceBuilderLibrary
-                                                    .animationCardExtent,
-                                          ),
-                                      itemCount: widget.items.length,
-                                      itemBuilder: (context, index) {
-                                        final entry = widget.items[index];
-                                        final flightKey = GlobalKey(
-                                          debugLabel:
-                                              'builder-card-${entry.item.animationName}',
-                                        );
-                                        final card = AnimationCard.compact(
-                                          key: ValueKey(
-                                            entry.item.animationName,
-                                          ),
-                                          flightKey: flightKey,
-                                          item: entry.item,
-                                          isDownloaded: entry.isInstalled,
-                                          isDownloading: entry.isDownloading,
-                                          resolvePreviewPath: widget
-                                              .libraryController
-                                              .getOrDownloadPreview,
-                                          resolveCachedPreviewPath: widget
-                                              .libraryController
-                                              .getCachedPreviewPath,
-                                          onPrimaryAction: () =>
-                                              widget.onPrimaryAction(
-                                                flightKey,
-                                                entry,
-                                              ),
-                                          onInfoTap: () =>
-                                              widget.onItemTap(entry),
-                                        );
-
-                                        if (index < 3) return card;
-
-                                        return AnimatedOpacity(
-                                          key: ValueKey(
-                                            'reveal-${entry.item.animationName}',
-                                          ),
-                                          opacity: expandedCardsOpacity,
-                                          duration: _dragHeight == null
-                                              ? const Duration(
-                                                  milliseconds: 180,
-                                                )
-                                              : Duration.zero,
-                                          curve: Curves.easeOut,
-                                          child: card,
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
+                            children: [...previousChildren, ?currentChild],
+                          );
+                        },
+                        transitionBuilder: (child, animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: ScaleTransition(
+                              alignment: Alignment.topCenter,
+                              scale: Tween<double>(
+                                begin: 0.975,
+                                end: 1,
+                              ).animate(animation),
+                              child: child,
                             ),
+                          );
+                        },
+                        child: widget.items.isEmpty
+                            ? const _EmptyLibraryState(
+                                key: ValueKey('empty-library'),
+                              )
+                            : LayoutBuilder(
+                                key: ValueKey(
+                                  widget.items
+                                      .map((entry) => entry.item.animationName)
+                                      .join('|'),
+                                ),
+                                builder: (context, constraints) {
+                                  final gridHeight = expandedProgress > 0
+                                      ? constraints.maxHeight
+                                      : constraints.constrainHeight(
+                                          SequenceBuilderLibrary
+                                              .collapsedGridHeight,
+                                        );
+
+                                  return Align(
+                                    alignment: Alignment.topLeft,
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      height: gridHeight,
+                                      child: GridView.builder(
+                                        padding: const EdgeInsets.only(
+                                          bottom: AppShell
+                                              .floatingNavExtraScrollSpace,
+                                        ),
+                                        physics: expandedProgress > 0
+                                            ? const BouncingScrollPhysics()
+                                            : const NeverScrollableScrollPhysics(),
+                                        gridDelegate:
+                                            const SliverGridDelegateWithFixedCrossAxisCount(
+                                              crossAxisCount: 3,
+                                              mainAxisSpacing: 12,
+                                              crossAxisSpacing: 12,
+                                              mainAxisExtent:
+                                                  SequenceBuilderLibrary
+                                                      .animationCardExtent,
+                                            ),
+                                        itemCount: widget.items.length,
+                                        itemBuilder: (context, index) {
+                                          final entry = widget.items[index];
+                                          final flightKey = GlobalKey(
+                                            debugLabel:
+                                                'builder-card-${entry.item.animationName}',
+                                          );
+                                          final card = AnimationCard.compact(
+                                            key: ValueKey(
+                                              entry.item.animationName,
+                                            ),
+                                            flightKey: flightKey,
+                                            item: entry.item,
+                                            isDownloaded: entry.isInstalled,
+                                            isDownloading: entry.isDownloading,
+                                            resolvePreviewPath: widget
+                                                .libraryController
+                                                .getOrDownloadPreview,
+                                            resolveCachedPreviewPath: widget
+                                                .libraryController
+                                                .getCachedPreviewPath,
+                                            onPrimaryAction: () =>
+                                                widget.onPrimaryAction(
+                                                  flightKey,
+                                                  entry,
+                                                ),
+                                            onInfoTap: () =>
+                                                widget.onItemTap(entry),
+                                          );
+
+                                          if (index < 3) return card;
+
+                                          return AnimatedOpacity(
+                                            key: ValueKey(
+                                              'reveal-${entry.item.animationName}',
+                                            ),
+                                            opacity: expandedCardsOpacity,
+                                            duration: _dragHeight == null
+                                                ? const Duration(
+                                                    milliseconds: 180,
+                                                  )
+                                                : Duration.zero,
+                                            curve: Curves.easeOut,
+                                            child: card,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
                     ),
                   ),
                 ),
