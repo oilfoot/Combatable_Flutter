@@ -91,6 +91,14 @@ class _TimelineInsertionTransition {
   final Completer<void> arrival;
 }
 
+class _TimelineRemovalTransition {
+  _TimelineRemovalTransition({
+    required this.firstRemovedIndex,
+    required this.replacementPlaceholderHandle,
+  });
+
+  final int firstRemovedIndex;
+  final _TimelinePlaceholderHandle replacementPlaceholderHandle;
   final Completer<void> placeholderCompletion = Completer<void>();
   bool isRemovingContent = true;
 }
