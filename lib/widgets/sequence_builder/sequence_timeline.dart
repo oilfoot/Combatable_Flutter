@@ -98,7 +98,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
         animateOnMount: terminalHandle.animateOnMount,
         delay: pendingReservations.isNotEmpty
             ? Duration.zero
-            : terminalHandle.animateOnMount
+            : terminalHandle.animateOnMount && !terminalHandle.revealImmediately
             ? _timelinePlaceholderRevealDelay
             : Duration.zero,
       ),
@@ -182,7 +182,9 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 index: widget.steps.length,
                 requiredPosition: widget.requiredNextPosition,
                 isFirstStep: widget.steps.isEmpty,
-                revealDelay: _timelinePlaceholderRevealDelay,
+                revealDelay: widget.openPlaceholderHandle.revealImmediately
+                    ? Duration.zero
+                    : _timelinePlaceholderRevealDelay,
                 isRemoving: widget.removalTransition != null,
                 removalCompletion:
                     widget.removalTransition?.placeholderCompletion,
@@ -670,6 +672,7 @@ class _RevealingAddTimelineStep extends StatefulWidget {
 class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
     with SingleTickerProviderStateMixin {
   static const _revealDuration = Duration(milliseconds: 238);
+  static const _bulkRestoreRevealDuration = Duration(milliseconds: 150);
 
   late final AnimationController _controller;
   Timer? _revealTimer;
@@ -679,7 +682,9 @@ class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: _revealDuration,
+      duration: widget.handle.revealImmediately
+          ? _bulkRestoreRevealDuration
+          : _revealDuration,
       value: widget.handle.animateOnMount ? 0 : 1,
     )..addStatusListener(_handleStatus);
 

@@ -1,5 +1,8 @@
 part of '../../screens/sequence_builder_screen.dart';
 
+const int _bulkRestoreMinimumWaveMilliseconds = 180;
+const int _bulkRestoreMaximumWaveMilliseconds = 480;
+
 extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
   Future<void> _playTimelineRemoval(SequenceMutation mutation) async {
     final firstRemovedIndex = mutation.commonPrefixLength;
@@ -270,6 +273,10 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
   _TimelineInsertionTransition _prepareTimelineInsertion(
     AnimationLibraryItem item, {
     required Completer<void> arrival,
+    bool playsArrivalHaptic = true,
+    bool managesOwnScroll = false,
+    bool consumesBulkReservedExtent = false,
+    bool revealsNextPlaceholderImmediately = false,
   }) {
     final landingHandle = _openPlaceholderHandle;
     final openPlaceholderIsRendered =
@@ -305,23 +312,104 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
           landingOverflowSteps >=
           AnimationCardFlightTuning.sequenceBuilderLongScrollStepThreshold,
       arrival: arrival,
+      playsArrivalHaptic: playsArrivalHaptic,
+      managesOwnScroll: managesOwnScroll,
+      consumesBulkReservedExtent: consumesBulkReservedExtent,
+      revealsNextPlaceholderImmediately: revealsNextPlaceholderImmediately,
     );
   }
 
   Future<void> _playStandaloneInsertions(
     List<AnimationLibraryItem> insertedItems,
   ) async {
-    for (final item in insertedItems) {
-      if (!mounted || _isLibraryExpanded) return;
+    if (insertedItems.isEmpty) return;
 
-      final arrival = Completer<void>();
-      final transition = _prepareTimelineInsertion(item, arrival: arrival);
-      final playback = _playTimelineInsertion(transition);
+    final isBulkRestore = insertedItems.length > 1;
+    if (isBulkRestore) {
+      _updateTimelineState(() {
+        _bulkRestoreReservedExtent =
+            insertedItems.length * _TimelineRail.positionToPositionExtent;
+      });
       await WidgetsBinding.instance.endOfFrame;
-      await Future<void>.delayed(const Duration(milliseconds: 70));
-      if (!arrival.isCompleted) arrival.complete();
-      await playback;
+      unawaited(_scrollTimelineForBulkRestore());
     }
+
+    final waveMilliseconds = (140 + insertedItems.length * 22).clamp(
+      _bulkRestoreMinimumWaveMilliseconds,
+      _bulkRestoreMaximumWaveMilliseconds,
+    );
+    final playbacks = <Future<void>>[];
+
+    for (var index = 0; index < insertedItems.length; index++) {
+      final normalizedIndex = insertedItems.length == 1
+          ? 0.0
+          : index / (insertedItems.length - 1);
+      final easeOutEventTime = 1 - math.sqrt(1 - normalizedIndex);
+      final delay = Duration(
+        milliseconds: (waveMilliseconds * easeOutEventTime).round(),
+      );
+      playbacks.add(
+        _playStandaloneInsertionAfterDelay(
+          insertedItems[index],
+          delay: delay,
+          playsArrivalHaptic: index >= insertedItems.length - 3,
+          isBulkRestore: isBulkRestore,
+          isLastInsertion: index == insertedItems.length - 1,
+        ),
+      );
+    }
+
+    try {
+      await Future.wait(playbacks);
+    } finally {
+      _updateTimelineState(() {
+        _bulkRestoreReservedExtent = 0;
+      });
+    }
+  }
+
+  Future<void> _scrollTimelineForBulkRestore() async {
+    if (!_timelineScrollController.hasClients) return;
+
+    final position = _timelineScrollController.position;
+    final targetOffset = position.maxScrollExtent;
+    if (targetOffset <= _timelineScrollController.offset + 0.5) return;
+
+    try {
+      await _timelineScrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (_) {
+      // The growing timeline may retarget the active scroll position.
+    }
+  }
+
+  Future<void> _playStandaloneInsertionAfterDelay(
+    AnimationLibraryItem item, {
+    required Duration delay,
+    required bool playsArrivalHaptic,
+    required bool isBulkRestore,
+    required bool isLastInsertion,
+  }) async {
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    if (!mounted || _isLibraryExpanded || _activeVisualRemovals > 0) return;
+
+    final arrival = Completer<void>();
+    final transition = _prepareTimelineInsertion(
+      item,
+      arrival: arrival,
+      playsArrivalHaptic: playsArrivalHaptic,
+      managesOwnScroll: true,
+      consumesBulkReservedExtent: isBulkRestore,
+      revealsNextPlaceholderImmediately: isBulkRestore && isLastInsertion,
+    );
+    final playback = _playTimelineInsertion(transition);
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 70));
+    if (!arrival.isCompleted) arrival.complete();
+    await playback;
   }
 
   Future<void> _playTimelineInsertion(
@@ -333,9 +421,12 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     _updateTimelineState(() {
       _pendingTimelineReservations.add(reservation);
       _lastClaimedPlaceholderHandle = reservation.handle;
-      _openPlaceholderHandle = _newPlaceholderHandle(animateOnMount: true);
+      _openPlaceholderHandle = _newPlaceholderHandle(
+        animateOnMount: true,
+        revealImmediately: transition.revealsNextPlaceholderImmediately,
+      );
     });
-    if (transition.landingNeedsPreScroll) {
+    if (!transition.managesOwnScroll && transition.landingNeedsPreScroll) {
       _requestTimelineScroll(reservation.handle, reserveNextSlot: true);
     }
 
@@ -344,12 +435,14 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
 
     late final _TimelinePlaceholderHandle scrollTarget;
     late final bool revealsFinalPlaceholder;
+    var committedStepCount = 0;
     _updateTimelineState(() {
       reservation.hasArrived = true;
 
       while (_pendingTimelineReservations.isNotEmpty &&
           _pendingTimelineReservations.first.hasArrived) {
         final arrivedReservation = _pendingTimelineReservations.removeAt(0);
+        committedStepCount++;
         _visualTimelineSteps.add(
           _TimelineVisualStep(
             id: arrivedReservation.handle.id,
@@ -364,19 +457,30 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
           ? _openPlaceholderHandle
           : _pendingTimelineReservations.last.handle;
       revealsFinalPlaceholder = _pendingTimelineReservations.isEmpty;
+      if (transition.consumesBulkReservedExtent && committedStepCount > 0) {
+        _bulkRestoreReservedExtent = math.max(
+          0,
+          _bulkRestoreReservedExtent -
+              committedStepCount * _TimelineRail.positionToPositionExtent,
+        );
+      }
     });
 
-    if (!transition.landingNeedsPreScroll && revealsFinalPlaceholder) {
+    if (!transition.managesOwnScroll &&
+        !transition.landingNeedsPreScroll &&
+        revealsFinalPlaceholder) {
       _requestTimelineScroll(
         scrollTarget,
         delay: _timelinePlaceholderRevealDelay,
         isPostRevealScroll: true,
       );
     }
-    await Future<void>.delayed(
-      _SequenceBuilderScreenState._previewPopHapticDelay,
-    );
-    await HapticFeedback.heavyImpact();
+    if (transition.playsArrivalHaptic) {
+      await Future<void>.delayed(
+        _SequenceBuilderScreenState._previewPopHapticDelay,
+      );
+      await HapticFeedback.heavyImpact();
+    }
   }
 
   Future<void> _animateAndAdd(

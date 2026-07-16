@@ -56,12 +56,16 @@ class _TimelineVisualStep {
 }
 
 class _TimelinePlaceholderHandle {
-  _TimelinePlaceholderHandle({required this.id, required this.animateOnMount})
-    : containerKey = GlobalKey(debugLabel: 'timeline-placeholder-$id'),
-      flightTargetKey = GlobalKey(debugLabel: 'timeline-flight-target-$id');
+  _TimelinePlaceholderHandle({
+    required this.id,
+    required this.animateOnMount,
+    this.revealImmediately = false,
+  }) : containerKey = GlobalKey(debugLabel: 'timeline-placeholder-$id'),
+       flightTargetKey = GlobalKey(debugLabel: 'timeline-flight-target-$id');
 
   final int id;
   final bool animateOnMount;
+  final bool revealImmediately;
   final GlobalKey containerKey;
   final GlobalKey flightTargetKey;
 }
@@ -82,6 +86,10 @@ class _TimelineInsertionTransition {
     required this.landingNeedsPreScroll,
     required this.usesLongScrollFlight,
     required this.arrival,
+    required this.playsArrivalHaptic,
+    required this.managesOwnScroll,
+    required this.consumesBulkReservedExtent,
+    required this.revealsNextPlaceholderImmediately,
   });
 
   final _PendingTimelineReservation reservation;
@@ -89,6 +97,10 @@ class _TimelineInsertionTransition {
   final bool landingNeedsPreScroll;
   final bool usesLongScrollFlight;
   final Completer<void> arrival;
+  final bool playsArrivalHaptic;
+  final bool managesOwnScroll;
+  final bool consumesBulkReservedExtent;
+  final bool revealsNextPlaceholderImmediately;
 }
 
 class _TimelineRemovalTransition {
@@ -131,6 +143,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   int _nextTransitionId = 0;
   int _activeVisualAddFlights = 0;
   int _activeVisualRemovals = 0;
+  double _bulkRestoreReservedExtent = 0;
   final Map<String, _TimelineInsertionTransition> _flightTransitions = {};
   _TimelineRemovalTransition? _timelineRemovalTransition;
   StreamSubscription<SequenceMutation>? _sequenceMutationSubscription;
@@ -265,10 +278,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
   _TimelinePlaceholderHandle _newPlaceholderHandle({
     required bool animateOnMount,
+    bool revealImmediately = false,
   }) {
     return _TimelinePlaceholderHandle(
       id: _takeTimelineSlotId(),
       animateOnMount: animateOnMount,
+      revealImmediately: revealImmediately,
     );
   }
 
@@ -571,10 +586,12 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
         ? SequenceBuilderLibrary.fullyCollapsedHeight +
               16 +
-              _incomingTimelineStepExtent
+              _incomingTimelineStepExtent +
+              _bulkRestoreReservedExtent
         : SequenceBuilderLibrary.collapsedHeight +
               16 +
-              _incomingTimelineStepExtent;
+              _incomingTimelineStepExtent +
+              _bulkRestoreReservedExtent;
 
     return Scaffold(
       body: SafeArea(
