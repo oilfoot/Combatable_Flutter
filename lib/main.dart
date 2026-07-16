@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'app_shell.dart';
 import 'controllers/sequence_controller.dart';
 import 'services/unity_service.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,7 +39,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Combatable Prototype',
-      theme: ThemeData.dark(),
+      theme: AppTheme.dark(),
       home: AppShell(
         unityService: unityService,
         sequenceController: sequenceController,

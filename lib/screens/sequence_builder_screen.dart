@@ -8,6 +8,8 @@ import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
 import '../controllers/sequence_history_controller.dart';
 import '../models/animation_library_item.dart';
+import '../theme/app_theme.dart';
+import '../widgets/app_confirmation_dialog.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_preview_frame.dart';
@@ -459,100 +461,13 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   }) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.68),
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 28),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 340),
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: const Color(0xFF26232C),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.34),
-                blurRadius: 28,
-                offset: const Offset(0, 14),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFF718B).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(13),
-                    ),
-                    child: Icon(icon, color: const Color(0xFFFF8CA0), size: 21),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                message,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.68),
-                  fontSize: 14,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(false),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.white.withValues(alpha: 0.72),
-                        minimumSize: const Size(0, 44),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          side: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.1),
-                          ),
-                        ),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(true),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF718B),
-                        foregroundColor: const Color(0xFF26151B),
-                        minimumSize: const Size(0, 44),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(confirmLabel),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      barrierColor: AppColors.black.withValues(alpha: AppOpacity.barrier),
+      builder: (_) => AppConfirmationDialog(
+        title: title,
+        message: message,
+        confirmLabel: confirmLabel,
+        icon: icon,
+        isDestructive: true,
       ),
     );
     return confirmed ?? false;
@@ -690,6 +605,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               _bulkRestoreReservedExtent;
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
         child: Stack(
@@ -741,7 +657,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               right: 0,
               height: _sequenceControlsHeaderExtent,
               child: ColoredBox(
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: AppColors.background,
                 child: _SequenceHeader(
                   sequenceNameController: _sequenceNameController,
                   onNameChanged: sequence.setSequenceName,
@@ -762,13 +678,17 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 ignoring: !_isLibraryExpanded,
                 child: AnimatedOpacity(
                   opacity: _isLibraryExpanded ? 1 : 0,
-                  duration: const Duration(milliseconds: 220),
+                  duration: AppMotion.standard,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _setLibraryPanelState(
                       SequenceBuilderLibraryPanelState.collapsed,
                     ),
-                    child: const ColoredBox(color: Color(0x66000000)),
+                    child: ColoredBox(
+                      color: AppColors.black.withValues(
+                        alpha: AppOpacity.scrim,
+                      ),
+                    ),
                   ),
                 ),
               ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
+import '../theme/app_theme.dart';
 import 'animation/animation_card.dart';
 
 enum SequenceBuilderLibraryPanelState { fullyCollapsed, collapsed, expanded }
@@ -42,9 +43,9 @@ class SequenceBuilderLibrary extends StatefulWidget {
 }
 
 class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
-  static const _panelAnimationDuration = Duration(milliseconds: 320);
-  static const _panelAnimationCurve = Curves.easeOutCubic;
-  static const double _bottomPadding = 12;
+  static const _panelAnimationDuration = AppMotion.panel;
+  static const _panelAnimationCurve = AppMotion.enter;
+  static const double _bottomPadding = AppSpacing.md;
   static const double _navigationScrimSolidHeight = 88;
   static const double _navigationScrimHeight =
       _navigationScrimSolidHeight +
@@ -185,18 +186,12 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 6, 16, _bottomPadding),
         decoration: BoxDecoration(
-          color: const Color(0xF2141418),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(
-            top: BorderSide(color: Colors.white.withOpacity(0.12)),
+          color: AppColors.panel,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadii.panel),
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 24,
-              offset: Offset(0, -8),
-            ),
-          ],
+          border: const Border(top: BorderSide(color: AppColors.borderSubtle)),
+          boxShadow: [AppShadows.panel],
         ),
         child: Stack(
           fit: StackFit.expand,
@@ -214,20 +209,17 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                           width: 48,
                           height: 5,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.28),
-                            borderRadius: BorderRadius.circular(999),
+                            color: AppColors.textDisabled,
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           const Text(
                             'Library',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            style: AppTypography.sectionTitle,
                           ),
                           const Spacer(),
                           IconButton(
@@ -249,7 +241,7 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -264,9 +256,9 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                       ignoring:
                           height < SequenceBuilderLibrary.collapsedHeight - 1,
                       child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 150),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
+                        duration: AppMotion.quick,
+                        switchInCurve: AppMotion.enter,
+                        switchOutCurve: AppMotion.exit,
                         layoutBuilder: (currentChild, previousChildren) {
                           return Stack(
                             alignment: Alignment.topCenter,
@@ -320,8 +312,8 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                                         gridDelegate:
                                             const SliverGridDelegateWithFixedCrossAxisCount(
                                               crossAxisCount: 3,
-                                              mainAxisSpacing: 12,
-                                              crossAxisSpacing: 12,
+                                              mainAxisSpacing: AppSpacing.md,
+                                              crossAxisSpacing: AppSpacing.md,
                                               mainAxisExtent:
                                                   SequenceBuilderLibrary
                                                       .animationCardExtent,
@@ -364,9 +356,7 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                                             ),
                                             opacity: expandedCardsOpacity,
                                             duration: _dragHeight == null
-                                                ? const Duration(
-                                                    milliseconds: 180,
-                                                  )
+                                                ? AppMotion.cardReveal
                                                 : Duration.zero,
                                             curve: Curves.easeOut,
                                             child: card,
@@ -395,9 +385,9 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Color(0x00141418),
-                        Color(0xFF141418),
-                        Color(0xFF141418),
+                        AppColors.transparent,
+                        AppColors.panel,
+                        AppColors.panel,
                       ],
                       stops: [0, _navigationScrimFadeEnd, 1],
                     ),
@@ -424,12 +414,15 @@ class _EmptyLibraryState extends StatelessWidget {
         child: Container(
           width: double.infinity,
           constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.045),
-            borderRadius: BorderRadius.circular(16),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadii.button),
             border: Border.all(
-              color: const Color(0xFFC8A7FF).withValues(alpha: 0.18),
+              color: AppColors.accentSoft.withValues(alpha: AppOpacity.muted),
             ),
           ),
           child: Row(
@@ -438,13 +431,13 @@ class _EmptyLibraryState extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8F55FF).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.accent.withValues(alpha: AppOpacity.subtle),
+                  borderRadius: BorderRadius.circular(AppRadii.small),
                 ),
                 child: const Icon(
                   Icons.search_off_rounded,
                   size: 22,
-                  color: Color(0xFFC8A7FF),
+                  color: AppColors.accentSoft,
                 ),
               ),
               const SizedBox(width: 12),
@@ -455,18 +448,13 @@ class _EmptyLibraryState extends StatelessWidget {
                   children: [
                     const Text(
                       'No matching animations',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: AppTypography.componentTitle,
                     ),
                     const SizedBox(height: 3),
                     Text(
                       'No card can continue from the current position.',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.58),
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],

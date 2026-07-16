@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/animation_library_item.dart';
+import '../../theme/app_theme.dart';
 import 'animation_preview_frame.dart';
 
 enum AnimationCardVariant { standard, compact }
@@ -52,14 +53,12 @@ class AnimationCard extends StatelessWidget {
   final double? width;
 
   bool get _isCompact => variant == AnimationCardVariant.compact;
-  double get _borderRadius => _isCompact ? 18 : 24;
+  double get _borderRadius => _isCompact ? AppRadii.card : AppRadii.dialog;
 
   @override
   Widget build(BuildContext context) {
     final card = Material(
-      color: _isCompact
-          ? Colors.white.withValues(alpha: 0.045)
-          : Theme.of(context).cardColor,
+      color: _isCompact ? AppColors.surface : Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(_borderRadius),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -79,9 +78,7 @@ class AnimationCard extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(_borderRadius),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.10),
-                    ),
+                    border: Border.all(color: AppColors.borderStrong),
                   ),
                 ),
               ),
@@ -111,18 +108,26 @@ class AnimationCard extends StatelessWidget {
 
   LinearGradient get _gradient {
     if (_isCompact) {
-      return const LinearGradient(
+      return LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Colors.transparent, Color(0x20000000), Color(0xB8000000)],
+        colors: [
+          AppColors.transparent,
+          AppColors.black.withValues(alpha: AppOpacity.subtle),
+          AppColors.black.withValues(alpha: AppOpacity.barrier),
+        ],
         stops: [0.40, 0.70, 1.0],
       );
     }
 
-    return const LinearGradient(
+    return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: [Colors.transparent, Color(0x10000000), Color(0x7A000000)],
+      colors: [
+        AppColors.transparent,
+        AppColors.black.withValues(alpha: AppOpacity.faint),
+        AppColors.black.withValues(alpha: AppOpacity.strong),
+      ],
       stops: [0.46, 0.76, 1.0],
     );
   }
@@ -139,13 +144,13 @@ class AnimationCard extends StatelessWidget {
             height: 26,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.34),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+              color: AppColors.black.withValues(alpha: AppOpacity.medium),
+              border: Border.all(color: AppColors.borderStrong),
             ),
             child: const Icon(
               Icons.info_outline,
               size: 15,
-              color: Colors.white,
+              color: AppColors.textPrimary,
             ),
           ),
         ),
@@ -160,9 +165,11 @@ class AnimationCard extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.48),
+              color: AppColors.black.withValues(alpha: AppOpacity.strong),
               border: Border.all(
-                color: const Color(0xFFC8A7FF).withValues(alpha: 0.42),
+                color: AppColors.accentSoft.withValues(
+                  alpha: AppOpacity.medium,
+                ),
               ),
             ),
             child: isDownloading
@@ -171,13 +178,13 @@ class AnimationCard extends StatelessWidget {
                     height: 13,
                     child: CircularProgressIndicator(
                       strokeWidth: 1.8,
-                      color: Color(0xFFC8A7FF),
+                      color: AppColors.accentSoft,
                     ),
                   )
                 : const Icon(
                     Icons.download_rounded,
                     size: 15,
-                    color: Color(0xFFC8A7FF),
+                    color: AppColors.accentSoft,
                   ),
           ),
         ),
@@ -189,14 +196,9 @@ class AnimationCard extends StatelessWidget {
           item.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            height: 1.02,
-            fontWeight: FontWeight.w800,
-            shadows: [
-              Shadow(color: Colors.black, blurRadius: 8, offset: Offset(0, 2)),
-            ],
+          style: AppTypography.compactCardTitle.copyWith(
+            color: AppColors.textPrimary,
+            shadows: const [AppShadows.compactImageText],
           ),
         ),
       ),
@@ -216,19 +218,11 @@ class AnimationCard extends StatelessWidget {
             item.title,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
+            style: AppTypography.button.copyWith(
+              color: AppColors.textPrimary,
               height: 1.05,
               letterSpacing: -0.25,
-              shadows: [
-                Shadow(
-                  color: Color(0xAA000000),
-                  blurRadius: 10,
-                  offset: Offset(0, 2),
-                ),
-              ],
+              shadows: [AppShadows.imageText],
             ),
           ),
           const SizedBox(height: 10),
@@ -263,10 +257,10 @@ class _AnimationCardActionButton extends StatelessWidget {
       width: double.infinity,
       height: 38,
       child: Material(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
         child: InkWell(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(AppRadii.pill),
           onTap: isLoading
               ? null
               : () async {
@@ -275,9 +269,11 @@ class _AnimationCardActionButton extends StatelessWidget {
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppRadii.pill),
               border: Border.all(
-                color: const Color(0xFFC8A7FF).withValues(alpha: 0.52),
+                color: AppColors.accentSoft.withValues(
+                  alpha: AppOpacity.strong,
+                ),
               ),
             ),
             child: isLoading
@@ -286,24 +282,22 @@ class _AnimationCardActionButton extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Color(0xFFC8A7FF),
+                      color: AppColors.accentSoft,
                     ),
                   )
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 21, color: const Color(0xFFC8A7FF)),
+                      Icon(icon, size: 21, color: AppColors.accentSoft),
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFC8A7FF),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
+                          style: AppTypography.controlLabel.copyWith(
+                            color: AppColors.accentSoft,
                           ),
                         ),
                       ),

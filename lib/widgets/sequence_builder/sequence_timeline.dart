@@ -335,8 +335,8 @@ class _AnimatedTimelineRailSegment extends StatefulWidget {
 class _AnimatedTimelineRailSegmentState
     extends State<_AnimatedTimelineRailSegment>
     with TickerProviderStateMixin {
-  static const _drawDuration = Duration(milliseconds: 320);
-  static const _eraseDuration = Duration(milliseconds: 220);
+  static const _drawDuration = AppMotion.panel;
+  static const _eraseDuration = AppMotion.standard;
 
   late final AnimationController _controller;
   late final AnimationController _extentController;
@@ -445,7 +445,7 @@ class _AnimatedTimelineRailSegmentState
             child: Container(
               width: 1,
               height: animatedExtent * progress,
-              color: Colors.white.withValues(alpha: 0.14),
+              color: AppColors.borderStrong,
             ),
           ),
         );
@@ -673,7 +673,7 @@ class _RevealingAddTimelineStep extends StatefulWidget {
 class _RevealingAddTimelineStepState extends State<_RevealingAddTimelineStep>
     with SingleTickerProviderStateMixin {
   static const _revealDuration = Duration(milliseconds: 238);
-  static const _bulkRestoreRevealDuration = Duration(milliseconds: 150);
+  static const _bulkRestoreRevealDuration = AppMotion.quick;
 
   late final AnimationController _controller;
   Timer? _revealTimer;
@@ -803,10 +803,10 @@ class _AddTimelineStep extends StatelessWidget {
                     width: fullWidth * revealProgress,
                     height: 96,
                     child: Material(
-                      color: Colors.white.withOpacity(0.035),
+                      color: AppColors.surface,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        side: BorderSide(color: Colors.white.withOpacity(0.10)),
+                        borderRadius: BorderRadius.circular(AppRadii.card),
+                        side: const BorderSide(color: AppColors.borderStrong),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: OverflowBox(
@@ -826,20 +826,22 @@ class _AddTimelineStep extends StatelessWidget {
                                   width: 72,
                                   height: 72,
                                   decoration: BoxDecoration(
-                                    color: const Color(
-                                      0xFF8F55FF,
-                                    ).withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(12),
+                                    color: AppColors.accent.withValues(
+                                      alpha: AppOpacity.subtle,
+                                    ),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.small,
+                                    ),
                                     border: Border.all(
-                                      color: const Color(
-                                        0xFFC8A7FF,
-                                      ).withOpacity(0.38),
+                                      color: AppColors.accentSoft.withValues(
+                                        alpha: AppOpacity.medium,
+                                      ),
                                     ),
                                   ),
                                   child: const Icon(
                                     Icons.add_rounded,
                                     size: 34,
-                                    color: Color(0xFFC8A7FF),
+                                    color: AppColors.accentSoft,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -853,10 +855,7 @@ class _AddTimelineStep extends StatelessWidget {
                                         isFirstStep
                                             ? 'Add first animation'
                                             : 'Add next animation',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 15,
-                                        ),
+                                        style: AppTypography.componentTitle,
                                       ),
                                       const SizedBox(height: 5),
                                       Text(
@@ -866,7 +865,7 @@ class _AddTimelineStep extends StatelessWidget {
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.60),
+                                          color: AppColors.textSecondary,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -947,15 +946,13 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Material(
-              color: Colors.white.withValues(
-                alpha: showsPlaceholderPreview ? 0.035 : 0.06,
-              ),
+              color: AppColors.surface,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(AppRadii.card),
                 side: BorderSide(
-                  color: Colors.white.withValues(
-                    alpha: showsPlaceholderPreview ? 0.10 : 0.09,
-                  ),
+                  color: showsPlaceholderPreview
+                      ? AppColors.borderStrong
+                      : AppColors.borderSubtle,
                 ),
               ),
               clipBehavior: Clip.antiAlias,
@@ -974,20 +971,22 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
                               width: 72,
                               height: 72,
                               decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF8F55FF,
-                                ).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
+                                color: AppColors.accent.withValues(
+                                  alpha: AppOpacity.subtle,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadii.small,
+                                ),
                                 border: Border.all(
-                                  color: const Color(
-                                    0xFFC8A7FF,
-                                  ).withValues(alpha: 0.38),
+                                  color: AppColors.accentSoft.withValues(
+                                    alpha: AppOpacity.medium,
+                                  ),
                                 ),
                               ),
                               child: const Icon(
                                 Icons.add_rounded,
                                 size: 34,
-                                color: Color(0xFFC8A7FF),
+                                color: AppColors.accentSoft,
                               ),
                             ),
                           ),
@@ -998,7 +997,9 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
                           child: Transform.scale(
                             scale: previewScale,
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.small,
+                              ),
                               child: SizedBox(
                                 width: 72,
                                 height: 72,
@@ -1071,10 +1072,7 @@ class _DeletionOutgoingText extends StatelessWidget {
                 item.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15,
-                ),
+                style: AppTypography.componentTitle,
               ),
               const SizedBox(height: 4),
               Text(
@@ -1082,7 +1080,7 @@ class _DeletionOutgoingText extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.56),
+                  color: AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1092,7 +1090,7 @@ class _DeletionOutgoingText extends StatelessWidget {
         Icon(
           Icons.delete_outline_rounded,
           size: 20,
-          color: Colors.white.withValues(alpha: 0.72),
+          color: AppColors.textSecondary,
         ),
       ],
     );
@@ -1116,7 +1114,7 @@ class _DeletionPlaceholderText extends StatelessWidget {
       children: [
         Text(
           isFirstStep ? 'Add first animation' : 'Add next animation',
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          style: AppTypography.componentTitle,
         ),
         const SizedBox(height: 5),
         Text(
@@ -1126,7 +1124,7 @@ class _DeletionPlaceholderText extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.60),
+            color: AppColors.textSecondary,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1176,10 +1174,10 @@ class _TimelineAnimationTile extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Material(
-            color: Colors.white.withOpacity(0.06),
+            color: AppColors.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18),
-              side: BorderSide(color: Colors.white.withOpacity(0.09)),
+              borderRadius: BorderRadius.circular(AppRadii.card),
+              side: const BorderSide(color: AppColors.borderSubtle),
             ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -1193,7 +1191,7 @@ class _TimelineAnimationTile extends StatelessWidget {
                       child: Transform.scale(
                         scale: previewScale,
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadii.small),
                           child: SizedBox(
                             width: 72,
                             height: 72,
@@ -1222,10 +1220,7 @@ class _TimelineAnimationTile extends StatelessWidget {
                                     item.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 15,
-                                    ),
+                                    style: AppTypography.componentTitle,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -1233,7 +1228,7 @@ class _TimelineAnimationTile extends StatelessWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: Colors.white.withOpacity(0.56),
+                                      color: AppColors.textSecondary,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -1270,10 +1265,10 @@ class _StepNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = Theme.of(context).scaffoldBackgroundColor;
+    const background = AppColors.background;
     final foreground = isPending
-        ? const Color(0xFFC8A7FF)
-        : Colors.white.withOpacity(0.78);
+        ? AppColors.accentSoft
+        : AppColors.textSecondary;
 
     return Container(
       width: 28,
@@ -1284,15 +1279,15 @@ class _StepNumber extends StatelessWidget {
         color: background,
         border: Border.all(
           color: isPending
-              ? const Color(0xFFC8A7FF).withOpacity(0.38)
-              : Colors.white.withOpacity(0.12),
+              ? AppColors.accentSoft.withValues(alpha: AppOpacity.medium)
+              : AppColors.borderSubtle,
         ),
       ),
       child: Text(
         '${index + 1}',
         style: TextStyle(
           color: foreground,
-          fontSize: 13,
+          fontSize: AppTypography.label.fontSize,
           fontWeight: FontWeight.w800,
         ),
       ),
@@ -1339,7 +1334,7 @@ class _TimelinePositionNode extends StatelessWidget {
                 width: 7,
                 height: 7,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFAA8BDD),
+                  color: AppColors.accentSoft,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -1348,11 +1343,7 @@ class _TimelinePositionNode extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             value,
-            style: const TextStyle(
-              color: Color(0xFFB9A2DE),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
+            style: AppTypography.label.copyWith(color: AppColors.accentSoft),
           ),
         ],
       ),
