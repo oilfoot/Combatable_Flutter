@@ -76,6 +76,15 @@ class SequenceHistoryController extends ChangeNotifier {
     return true;
   }
 
+  bool addAnimations(List<AnimationLibraryItem> items, {String? transitionId}) {
+    if (items.isEmpty) return false;
+
+    final before = _snapshot();
+    if (!_sequenceController.addAnimationItems(items)) return false;
+    _commitUserMutation(before, transitionId: transitionId);
+    return true;
+  }
+
   bool removeFrom(int index) {
     if (index < 0 || index >= _sequenceController.selectedAnimations.length) {
       return false;

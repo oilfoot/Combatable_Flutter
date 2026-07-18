@@ -84,6 +84,31 @@ class SequenceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool addAnimationItems(List<AnimationLibraryItem> items) {
+    if (items.isEmpty) return false;
+
+    var requiredPosition = requiredNextStartPosition;
+    for (final item in items) {
+      if (requiredPosition != null && item.startPosition != requiredPosition) {
+        _addLocalLog(
+          "Blocked animation batch: ${item.title} does not match required "
+          "start position '$requiredPosition'.",
+        );
+        notifyListeners();
+        return false;
+      }
+      requiredPosition = item.endPosition;
+    }
+
+    _selectedAnimations.addAll(items);
+    _addLocalLog(
+      'Added ${items.length} animation${items.length == 1 ? '' : 's'} as one '
+      'sequence action.',
+    );
+    notifyListeners();
+    return true;
+  }
+
   void removeAnimationAt(int index) {
     if (index < 0 || index >= _selectedAnimations.length) return;
 

@@ -8,6 +8,7 @@ import '../controllers/library_controller.dart';
 import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_preview_frame.dart';
+import '../widgets/sequence_builder/smart_connect_dialog.dart';
 
 class LibrarySearchScreen extends StatefulWidget {
   const LibrarySearchScreen({
@@ -118,6 +119,11 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
           : (sourceKey) => _animateAndAdd(sourceKey, entry),
+      onBeforePrimaryAction: () => confirmSmartConnection(
+        context,
+        plan: widget.libraryController.planConnection(entry),
+        selectedAnimation: entry.item,
+      ),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }

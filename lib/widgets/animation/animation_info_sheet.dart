@@ -17,6 +17,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required this.onPrimaryAction,
     this.showPrimaryAction = true,
     this.onAnimatedPrimaryAction,
+    this.onBeforePrimaryAction,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
     this.isBookmarked = false,
@@ -33,6 +34,7 @@ class AnimationInfoSheet extends StatelessWidget {
   final Future<void> Function() onPrimaryAction;
   final bool showPrimaryAction;
   final Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction;
+  final Future<bool> Function()? onBeforePrimaryAction;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
   final bool isBookmarked;
@@ -50,6 +52,7 @@ class AnimationInfoSheet extends StatelessWidget {
     required Future<void> Function() onPrimaryAction,
     bool showPrimaryAction = true,
     Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction,
+    Future<bool> Function()? onBeforePrimaryAction,
     Future<String?> Function(String? previewPath)? resolvePreviewPath,
     String? Function(String? previewPath)? resolveCachedPreviewPath,
     bool isBookmarked = false,
@@ -73,6 +76,7 @@ class AnimationInfoSheet extends StatelessWidget {
           onPrimaryAction: onPrimaryAction,
           showPrimaryAction: showPrimaryAction,
           onAnimatedPrimaryAction: onAnimatedPrimaryAction,
+          onBeforePrimaryAction: onBeforePrimaryAction,
           resolvePreviewPath: resolvePreviewPath,
           resolveCachedPreviewPath: resolveCachedPreviewPath,
           isBookmarked: isBookmarked,
@@ -290,6 +294,11 @@ class AnimationInfoSheet extends StatelessWidget {
                             onPressed: isDownloading
                                 ? null
                                 : () async {
+                                    final canProceed =
+                                        await onBeforePrimaryAction?.call() ??
+                                        true;
+                                    if (!canProceed || !context.mounted) return;
+
                                     final animatedAction =
                                         onAnimatedPrimaryAction;
                                     if (animatedAction == null) {

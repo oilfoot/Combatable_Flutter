@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../data/mock_animation_library.dart';
 import '../models/animation_library_item.dart';
 import '../services/remote_addressables_service.dart';
+import '../services/sequence_connection_planner.dart';
 import 'bookmark_controller.dart';
 import 'sequence_controller.dart';
 import 'sequence_history_controller.dart';
@@ -43,6 +44,8 @@ class LibraryController extends ChangeNotifier {
   final RemoteAddressablesService _remoteAddressablesService;
   final BookmarkController _bookmarkController;
   final Future<void> Function(AnimationLibraryItem item) _onViewIn3D;
+  static const SequenceConnectionPlanner _connectionPlanner =
+      SequenceConnectionPlanner(maxBridgeAnimations: 5);
 
   String? _selectedCategoryId;
 
@@ -229,9 +232,27 @@ class LibraryController extends ChangeNotifier {
       return;
     }
 
-    _sequenceHistoryController.addAnimation(
+    final plan = planConnection(entry);
+    if (!plan.canConnect) {
+      throw StateError(
+        'No Smart Connect route from ${plan.fromPosition} '
+        'to ${plan.toPosition}.',
+      );
+    }
+
+    _sequenceHistoryController.addAnimations([
+      ...plan.bridgeAnimations,
       entry.item,
-      transitionId: transitionId,
+    ], transitionId: transitionId);
+  }
+
+  SequenceConnectionPlan planConnection(LibraryDisplayItem entry) {
+    return _connectionPlanner.plan(
+      currentEndPosition: _sequenceController.requiredNextStartPosition,
+      selectedAnimation: entry.item,
+      availableAnimations: allItems
+          .where((candidate) => candidate.isInstalled)
+          .map((candidate) => candidate.item),
     );
   }
 

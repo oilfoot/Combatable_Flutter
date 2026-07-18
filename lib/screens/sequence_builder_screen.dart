@@ -15,6 +15,7 @@ import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_preview_frame.dart';
 import '../widgets/sequence_builder_library.dart';
+import '../widgets/sequence_builder/smart_connect_dialog.dart';
 
 part '../widgets/sequence_builder/sequence_timeline.dart';
 part '../widgets/sequence_builder/sequence_timeline_transitions.dart';
@@ -587,6 +588,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               scaleEnd: AnimationCardFlightTuning.detailMorphScaleEnd,
               morphFrame: true,
             ),
+      onBeforePrimaryAction: () => confirmSmartConnection(
+        context,
+        plan: widget.libraryController.planConnection(entry),
+        selectedAnimation: entry.item,
+      ),
       onPrimaryAction: () async {
         await _handlePrimaryAction(entry);
       },

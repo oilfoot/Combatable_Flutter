@@ -18,6 +18,7 @@ import '../widgets/profile/profile_collection_tabs.dart';
 import '../widgets/profile/profile_favorites_grid.dart';
 import '../widgets/profile/profile_header.dart';
 import '../widgets/profile/profile_sequence_list.dart';
+import '../widgets/sequence_builder/smart_connect_dialog.dart';
 import 'saved_sequence_detail_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -116,6 +117,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       isBookmarked: library.isBookmarked(entry.item),
       onBookmarkToggle: () => library.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: (sourceKey) => _animateAndAdd(sourceKey, entry),
+      onBeforePrimaryAction: () => confirmSmartConnection(
+        context,
+        plan: library.planConnection(entry),
+        selectedAnimation: entry.item,
+      ),
       onPrimaryAction: () => _handleFavoriteAdd(entry),
     );
   }

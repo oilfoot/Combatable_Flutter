@@ -11,6 +11,8 @@ class AppConfirmationDialog extends StatelessWidget {
     required this.confirmLabel,
     required this.icon,
     this.isDestructive = false,
+    this.showCancelAction = true,
+    this.cancelLabel = 'Cancel',
   });
 
   final String title;
@@ -18,6 +20,8 @@ class AppConfirmationDialog extends StatelessWidget {
   final String confirmLabel;
   final IconData icon;
   final bool isDestructive;
+  final bool showCancelAction;
+  final String cancelLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -75,21 +79,23 @@ class AppConfirmationDialog extends StatelessWidget {
             const SizedBox(height: AppSpacing.xl),
             Row(
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.textSecondary,
-                      minimumSize: const Size(0, 44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadii.medium),
-                        side: const BorderSide(color: AppColors.borderStrong),
+                if (showCancelAction) ...[
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textSecondary,
+                        minimumSize: const Size(0, 44),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadii.medium),
+                          side: const BorderSide(color: AppColors.borderStrong),
+                        ),
                       ),
+                      child: Text(cancelLabel),
                     ),
-                    child: const Text('Cancel'),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.buttonGap),
+                  const SizedBox(width: AppSpacing.buttonGap),
+                ],
                 Expanded(
                   child: FilledButton(
                     onPressed: () => Navigator.of(context).pop(true),
