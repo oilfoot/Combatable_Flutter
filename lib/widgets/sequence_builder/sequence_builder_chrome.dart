@@ -90,6 +90,8 @@ class _SequenceHeader extends StatelessWidget {
   const _SequenceHeader({
     required this.sequenceNameController,
     required this.onNameChanged,
+    required this.canSave,
+    required this.onSaveSequence,
     required this.onBuildUnitySequence,
     required this.canUndo,
     required this.canRedo,
@@ -101,6 +103,8 @@ class _SequenceHeader extends StatelessWidget {
 
   final TextEditingController sequenceNameController;
   final ValueChanged<String> onNameChanged;
+  final bool canSave;
+  final Future<void> Function(String name) onSaveSequence;
   final Future<void> Function() onBuildUnitySequence;
   final bool canUndo;
   final bool canRedo;
@@ -118,15 +122,14 @@ class _SequenceHeader extends StatelessWidget {
       barrierColor: AppColors.black.withValues(alpha: AppOpacity.barrier),
       builder: (_) => _SequenceDetailsSheet(
         initialName: sequenceNameController.text,
-        onSave: (name) {
-          final normalizedName = name.trim().isEmpty
-              ? 'New Sequence'
-              : name.trim();
+        onSave: (name) async {
+          final normalizedName = name.trim();
           sequenceNameController.value = TextEditingValue(
             text: normalizedName,
             selection: TextSelection.collapsed(offset: normalizedName.length),
           );
           onNameChanged(normalizedName);
+          await onSaveSequence(normalizedName);
         },
       ),
     );
@@ -157,10 +160,15 @@ class _SequenceHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.md),
                 IconButton(
-                  tooltip: 'Name and save sequence',
-                  onPressed: () => _openSequenceDetails(context),
+                  tooltip: canSave
+                      ? 'Name and save sequence'
+                      : 'Add at least 2 steps to save',
+                  onPressed: canSave
+                      ? () => _openSequenceDetails(context)
+                      : null,
                   icon: const Icon(Icons.bookmark_add_outlined, size: 20),
                   color: AppColors.accentSoft,
+                  disabledColor: AppColors.textDisabled,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints.tightFor(
                     width: SequenceBuilderLayout.minimumControlTarget,
@@ -226,7 +234,7 @@ class _SequenceDetailsSheet extends StatefulWidget {
   });
 
   final String initialName;
-  final ValueChanged<String> onSave;
+  final Future<void> Function(String name) onSave;
 
   @override
   State<_SequenceDetailsSheet> createState() => _SequenceDetailsSheetState();
@@ -234,6 +242,10 @@ class _SequenceDetailsSheet extends StatefulWidget {
 
 class _SequenceDetailsSheetState extends State<_SequenceDetailsSheet> {
   late final TextEditingController _nameController;
+  bool _isSaving = false;
+  String? _saveError;
+
+  bool get _hasValidName => _nameController.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -247,9 +259,24 @@ class _SequenceDetailsSheetState extends State<_SequenceDetailsSheet> {
     super.dispose();
   }
 
-  void _save() {
-    widget.onSave(_nameController.text);
-    Navigator.of(context).pop();
+  Future<void> _save() async {
+    if (!_hasValidName || _isSaving) return;
+
+    setState(() {
+      _isSaving = true;
+      _saveError = null;
+    });
+
+    try {
+      await widget.onSave(_nameController.text.trim());
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _saveError = 'The sequence could not be saved. Please try again.';
+      });
+    }
   }
 
   @override
@@ -306,8 +333,13 @@ class _SequenceDetailsSheetState extends State<_SequenceDetailsSheet> {
               const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _nameController,
+                autofocus: true,
+                enabled: !_isSaving,
                 textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _save(),
+                onChanged: (_) => setState(() => _saveError = null),
+                onSubmitted: (_) {
+                  if (_hasValidName) _save();
+                },
                 decoration: InputDecoration(
                   labelText: 'Sequence name',
                   prefixIcon: const Icon(Icons.edit_outlined, size: 19),
@@ -323,14 +355,32 @@ class _SequenceDetailsSheetState extends State<_SequenceDetailsSheet> {
                   ),
                 ),
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _saveError!,
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.destructiveSoft,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
                 height: 48,
                 child: FilledButton.icon(
-                  onPressed: _save,
-                  icon: const Icon(Icons.bookmark_add_outlined, size: 19),
-                  label: const Text('Save sequence'),
+                  onPressed: _hasValidName && !_isSaving ? _save : null,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.textPrimary,
+                          ),
+                        )
+                      : const Icon(Icons.bookmark_add_outlined, size: 19),
+                  label: Text(_isSaving ? 'Saving...' : 'Save sequence'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     foregroundColor: AppColors.textPrimary,

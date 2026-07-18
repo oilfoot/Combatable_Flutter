@@ -1,23 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../models/saved_sequence.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/profile_layout.dart';
-
-class ProfileSequenceEntry {
-  const ProfileSequenceEntry({
-    required this.title,
-    required this.stepCount,
-    required this.startPosition,
-    required this.endPosition,
-    required this.updatedLabel,
-  });
-
-  final String title;
-  final int stepCount;
-  final String startPosition;
-  final String endPosition;
-  final String updatedLabel;
-}
 
 class ProfileSequenceList extends StatelessWidget {
   const ProfileSequenceList({
@@ -26,8 +11,8 @@ class ProfileSequenceList extends StatelessWidget {
     required this.onSequencePressed,
   });
 
-  final List<ProfileSequenceEntry> entries;
-  final ValueChanged<ProfileSequenceEntry> onSequencePressed;
+  final List<SavedSequence> entries;
+  final ValueChanged<SavedSequence> onSequencePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -50,17 +35,18 @@ class ProfileSequenceList extends StatelessWidget {
 class _SavedSequenceRow extends StatelessWidget {
   const _SavedSequenceRow({required this.entry, required this.onTap});
 
-  final ProfileSequenceEntry entry;
+  final SavedSequence entry;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final stepLabel = '${entry.stepCount} animation steps';
+    final updatedLabel = _formatUpdatedLabel(entry.updatedAt);
 
     return Semantics(
       button: true,
       label:
-          '${entry.title}, $stepLabel, '
+          '${entry.name}, $stepLabel, '
           '${entry.startPosition} to ${entry.endPosition}',
       child: Material(
         color: AppColors.surface,
@@ -87,7 +73,7 @@ class _SavedSequenceRow extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            entry.title,
+                            entry.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTypography.componentTitle.copyWith(
@@ -120,7 +106,7 @@ class _SavedSequenceRow extends StatelessWidget {
                               const SizedBox(width: AppSpacing.sm),
                               Flexible(
                                 child: Text(
-                                  entry.updatedLabel,
+                                  updatedLabel,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: AppTypography.caption.copyWith(
@@ -147,6 +133,25 @@ class _SavedSequenceRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatUpdatedLabel(DateTime value) {
+  final now = DateTime.now();
+  final difference = now.difference(value);
+
+  if (difference.inMinutes < 1) return 'Saved just now';
+  if (difference.inHours < 1) {
+    return 'Saved ${difference.inMinutes}m ago';
+  }
+  if (difference.inDays < 1) {
+    return 'Saved ${difference.inHours}h ago';
+  }
+  if (difference.inDays == 1) return 'Saved yesterday';
+  if (difference.inDays < 7) return 'Saved ${difference.inDays}d ago';
+
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  return 'Saved $day.$month.${value.year}';
 }
 
 class _SequenceCoverPlaceholder extends StatelessWidget {

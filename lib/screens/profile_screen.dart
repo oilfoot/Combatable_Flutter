@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
+import '../controllers/saved_sequence_controller.dart';
 import '../theme/app_theme.dart';
 import '../theme/profile_layout.dart';
 import '../widgets/animation/animation_info_sheet.dart';
@@ -13,9 +14,14 @@ import '../widgets/profile/profile_header.dart';
 import '../widgets/profile/profile_sequence_list.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.libraryController});
+  const ProfileScreen({
+    super.key,
+    required this.libraryController,
+    required this.savedSequenceController,
+  });
 
   final LibraryController libraryController;
+  final SavedSequenceController savedSequenceController;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -24,45 +30,25 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   ProfileCollection _selectedCollection = ProfileCollection.favorites;
 
-  // Temporary presentation data. These entries will be replaced by the saved
-  // sequence repository when persistence is introduced.
-  static const _sequences = <ProfileSequenceEntry>[
-    ProfileSequenceEntry(
-      title: 'Kick Combo',
-      stepCount: 8,
-      startPosition: 'Pos3',
-      endPosition: 'Pos2',
-      updatedLabel: 'Edited 2 hours ago',
-    ),
-    ProfileSequenceEntry(
-      title: 'Defense Flow',
-      stepCount: 6,
-      startPosition: 'Pos0',
-      endPosition: 'Pos3',
-      updatedLabel: 'Edited yesterday',
-    ),
-    ProfileSequenceEntry(
-      title: 'Warm-up',
-      stepCount: 5,
-      startPosition: 'Any',
-      endPosition: 'Pos1',
-      updatedLabel: 'Edited 3 days ago',
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
     widget.libraryController.addListener(_onLibraryChanged);
+    widget.savedSequenceController.addListener(_onSavedSequencesChanged);
   }
 
   @override
   void dispose() {
     widget.libraryController.removeListener(_onLibraryChanged);
+    widget.savedSequenceController.removeListener(_onSavedSequencesChanged);
     super.dispose();
   }
 
   void _onLibraryChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onSavedSequencesChanged() {
     if (mounted) setState(() {});
   }
 
@@ -170,9 +156,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         )
                       : ProfileSequenceList(
                           key: const ValueKey(ProfileCollection.sequences),
-                          entries: _sequences,
+                          entries: widget.savedSequenceController.sequences,
                           onSequencePressed: (entry) =>
-                              _showPlaceholder(entry.title),
+                              _showPlaceholder(entry.name),
                         ),
                 ),
               ),

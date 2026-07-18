@@ -6,6 +6,7 @@ import 'controllers/library_controller.dart';
 import 'controllers/bookmark_controller.dart';
 import 'controllers/sequence_controller.dart';
 import 'controllers/sequence_history_controller.dart';
+import 'controllers/saved_sequence_controller.dart';
 import 'screens/full_library_screen.dart';
 import 'widgets/floating_nav_bar.dart';
 import 'screens/home_screen.dart';
@@ -46,6 +47,7 @@ class _AppShellState extends State<AppShell> {
   late final BookmarkController _bookmarkController;
   late final LibraryController _libraryController;
   late final SequenceHistoryController _sequenceHistoryController;
+  late final SavedSequenceController _savedSequenceController;
   late final List<Widget> _pages;
 
   @override
@@ -60,6 +62,7 @@ class _AppShellState extends State<AppShell> {
     _sequenceHistoryController = SequenceHistoryController(
       sequenceController: widget.sequenceController,
     );
+    _savedSequenceController = SavedSequenceController();
 
     _libraryController = LibraryController(
       sequenceController: widget.sequenceController,
@@ -69,6 +72,7 @@ class _AppShellState extends State<AppShell> {
     );
 
     unawaited(_bookmarkController.initialize());
+    unawaited(_savedSequenceController.initialize());
     unawaited(_remoteAddressablesService.initializeLibrary());
 
     _pages = [
@@ -86,9 +90,13 @@ class _AppShellState extends State<AppShell> {
         sequenceController: widget.sequenceController,
         sequenceHistoryController: _sequenceHistoryController,
         libraryController: _libraryController,
+        savedSequenceController: _savedSequenceController,
         onBuildUnitySequence: buildAndOpenUnity,
       ),
-      ProfileScreen(libraryController: _libraryController),
+      ProfileScreen(
+        libraryController: _libraryController,
+        savedSequenceController: _savedSequenceController,
+      ),
     ];
   }
 
@@ -97,6 +105,7 @@ class _AppShellState extends State<AppShell> {
     _libraryController.dispose();
     _bookmarkController.dispose();
     _sequenceHistoryController.dispose();
+    _savedSequenceController.dispose();
     _remoteAddressablesService.dispose();
     super.dispose();
   }

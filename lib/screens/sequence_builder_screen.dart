@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../controllers/library_controller.dart';
 import '../controllers/sequence_controller.dart';
 import '../controllers/sequence_history_controller.dart';
+import '../controllers/saved_sequence_controller.dart';
 import '../models/animation_library_item.dart';
 import '../theme/app_theme.dart';
 import '../theme/sequence_builder_layout.dart';
@@ -29,12 +30,14 @@ class SequenceBuilderScreen extends StatefulWidget {
     required this.sequenceController,
     required this.sequenceHistoryController,
     required this.libraryController,
+    required this.savedSequenceController,
     required this.onBuildUnitySequence,
   });
 
   final SequenceController sequenceController;
   final SequenceHistoryController sequenceHistoryController;
   final LibraryController libraryController;
+  final SavedSequenceController savedSequenceController;
   final Future<void> Function() onBuildUnitySequence;
 
   @override
@@ -462,6 +465,18 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     widget.sequenceHistoryController.clear();
   }
 
+  Future<void> _saveCurrentSequence(String name) async {
+    final animations = widget.sequenceController.selectedAnimations;
+    if (animations.length < 2) return;
+
+    widget.sequenceController.setSequenceName(name);
+    await widget.savedSequenceController.save(
+      name: name,
+      animations: animations,
+    );
+    await HapticFeedback.mediumImpact();
+  }
+
   Future<void> _showAnimationInfo(LibraryDisplayItem entry) async {
     await AnimationInfoSheet.show(
       context,
@@ -617,6 +632,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                 child: _SequenceHeader(
                   sequenceNameController: _sequenceNameController,
                   onNameChanged: sequence.setSequenceName,
+                  canSave: sequence.selectedAnimations.length >= 2,
+                  onSaveSequence: _saveCurrentSequence,
                   onBuildUnitySequence: widget.onBuildUnitySequence,
                   canUndo: widget.sequenceHistoryController.canUndo,
                   canRedo: widget.sequenceHistoryController.canRedo,
