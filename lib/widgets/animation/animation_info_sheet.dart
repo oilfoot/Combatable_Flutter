@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/animation_library_item.dart';
+import '../../theme/app_theme.dart';
 import 'animation_preview_frame.dart';
 
 class AnimationInfoSheet extends StatelessWidget {
@@ -17,6 +19,8 @@ class AnimationInfoSheet extends StatelessWidget {
     this.onAnimatedPrimaryAction,
     this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
+    this.isBookmarked = false,
+    this.onBookmarkToggle,
   });
 
   final AnimationLibraryItem item;
@@ -28,6 +32,8 @@ class AnimationInfoSheet extends StatelessWidget {
   final Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
+  final bool isBookmarked;
+  final Future<void> Function()? onBookmarkToggle;
 
   static Future<void> show(
     BuildContext context, {
@@ -40,6 +46,8 @@ class AnimationInfoSheet extends StatelessWidget {
     Future<void> Function(GlobalKey sourceKey)? onAnimatedPrimaryAction,
     Future<String?> Function(String? previewPath)? resolvePreviewPath,
     String? Function(String? previewPath)? resolveCachedPreviewPath,
+    bool isBookmarked = false,
+    Future<void> Function()? onBookmarkToggle,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -57,6 +65,8 @@ class AnimationInfoSheet extends StatelessWidget {
           onAnimatedPrimaryAction: onAnimatedPrimaryAction,
           resolvePreviewPath: resolvePreviewPath,
           resolveCachedPreviewPath: resolveCachedPreviewPath,
+          isBookmarked: isBookmarked,
+          onBookmarkToggle: onBookmarkToggle,
         );
       },
     );
@@ -122,6 +132,13 @@ class AnimationInfoSheet extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (onBookmarkToggle != null) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            _AnimationInfoBookmarkButton(
+                              initiallyBookmarked: isBookmarked,
+                              onToggle: onBookmarkToggle!,
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -214,6 +231,57 @@ class AnimationInfoSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _AnimationInfoBookmarkButton extends StatefulWidget {
+  const _AnimationInfoBookmarkButton({
+    required this.initiallyBookmarked,
+    required this.onToggle,
+  });
+
+  final bool initiallyBookmarked;
+  final Future<void> Function() onToggle;
+
+  @override
+  State<_AnimationInfoBookmarkButton> createState() =>
+      _AnimationInfoBookmarkButtonState();
+}
+
+class _AnimationInfoBookmarkButtonState
+    extends State<_AnimationInfoBookmarkButton> {
+  late bool _isBookmarked = widget.initiallyBookmarked;
+  bool _isUpdating = false;
+
+  Future<void> _toggle() async {
+    if (_isUpdating) return;
+    setState(() => _isUpdating = true);
+
+    await HapticFeedback.selectionClick();
+    await widget.onToggle();
+
+    if (!mounted) return;
+    setState(() {
+      _isBookmarked = !_isBookmarked;
+      _isUpdating = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: _isBookmarked ? 'Remove bookmark' : 'Bookmark animation',
+      onPressed: _isUpdating ? null : _toggle,
+      icon: Icon(
+        _isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+      ),
+      color: _isBookmarked ? AppColors.accentSoft : AppColors.textPrimary,
+      disabledColor: AppColors.textDisabled,
+      style: IconButton.styleFrom(
+        backgroundColor: AppColors.surface,
+        side: const BorderSide(color: AppColors.borderSubtle),
+      ),
     );
   }
 }

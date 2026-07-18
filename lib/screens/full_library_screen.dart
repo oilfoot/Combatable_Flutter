@@ -53,6 +53,9 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      isBookmarked: widget.libraryController.isBookmarked(entry.item),
+      onBookmarkToggle: () =>
+          widget.libraryController.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
           : (sourceKey) => _animateAndAdd(
@@ -140,6 +143,11 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 isDownloaded: entry.isInstalled,
                 isDownloading: entry.isDownloading,
                 actionLabel: library.getPrimaryActionLabel(entry),
+                isBookmarked: library.isBookmarked(entry.item),
+                onBookmarkTap: () async {
+                  await HapticFeedback.selectionClick();
+                  await library.toggleBookmark(entry.item);
+                },
                 resolvePreviewPath: library.getOrDownloadPreview,
                 resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../data/mock_animation_library.dart';
 import '../models/animation_library_item.dart';
 import '../services/remote_addressables_service.dart';
+import 'bookmark_controller.dart';
 import 'sequence_controller.dart';
 import 'sequence_history_controller.dart';
 
@@ -25,16 +26,20 @@ class LibraryController extends ChangeNotifier {
     required SequenceController sequenceController,
     required SequenceHistoryController sequenceHistoryController,
     required RemoteAddressablesService remoteAddressablesService,
+    required BookmarkController bookmarkController,
   }) : _sequenceController = sequenceController,
        _sequenceHistoryController = sequenceHistoryController,
-       _remoteAddressablesService = remoteAddressablesService {
+       _remoteAddressablesService = remoteAddressablesService,
+       _bookmarkController = bookmarkController {
     _sequenceController.addListener(_onDependenciesChanged);
     _remoteAddressablesService.addListener(_onDependenciesChanged);
+    _bookmarkController.addListener(_onDependenciesChanged);
   }
 
   final SequenceController _sequenceController;
   final SequenceHistoryController _sequenceHistoryController;
   final RemoteAddressablesService _remoteAddressablesService;
+  final BookmarkController _bookmarkController;
 
   String? _selectedCategoryId;
 
@@ -105,6 +110,40 @@ class LibraryController extends ChangeNotifier {
         .toList();
   }
 
+  List<LibraryDisplayItem> get bookmarkedItems {
+    final liveItems = {
+      for (final entry in allItems) entry.item.animationName: entry,
+    };
+
+    return _bookmarkController.items
+        .map((snapshot) {
+          final liveEntry = liveItems[snapshot.animationName];
+          if (liveEntry != null) return liveEntry;
+
+          return LibraryDisplayItem(
+            item: snapshot,
+            isRemote: snapshot.addressKey != null,
+            isInstalled:
+                snapshot.addressKey == null ||
+                _remoteAddressablesService.isAnimationDownloaded(
+                  snapshot.downloadKey,
+                ),
+            isDownloading: _remoteAddressablesService.isAnimationDownloading(
+              snapshot.downloadKey,
+            ),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  bool isBookmarked(AnimationLibraryItem item) {
+    return _bookmarkController.isBookmarked(item);
+  }
+
+  Future<void> toggleBookmark(AnimationLibraryItem item) {
+    return _bookmarkController.toggle(item);
+  }
+
   List<LibraryDisplayItem> get recommendedNextItems {
     return categoryFilteredItems
         .where((entry) => _sequenceController.canAddAnimation(entry.item))
@@ -163,6 +202,7 @@ class LibraryController extends ChangeNotifier {
   void dispose() {
     _sequenceController.removeListener(_onDependenciesChanged);
     _remoteAddressablesService.removeListener(_onDependenciesChanged);
+    _bookmarkController.removeListener(_onDependenciesChanged);
     super.dispose();
   }
 }

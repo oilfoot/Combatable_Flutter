@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'controllers/library_controller.dart';
+import 'controllers/bookmark_controller.dart';
 import 'controllers/sequence_controller.dart';
 import 'controllers/sequence_history_controller.dart';
 import 'screens/full_library_screen.dart';
@@ -42,6 +43,7 @@ class _AppShellState extends State<AppShell> {
   );
 
   late final RemoteAddressablesService _remoteAddressablesService;
+  late final BookmarkController _bookmarkController;
   late final LibraryController _libraryController;
   late final SequenceHistoryController _sequenceHistoryController;
   late final List<Widget> _pages;
@@ -53,6 +55,7 @@ class _AppShellState extends State<AppShell> {
     _remoteAddressablesService = RemoteAddressablesService(
       unityService: widget.unityService,
     );
+    _bookmarkController = BookmarkController();
 
     _sequenceHistoryController = SequenceHistoryController(
       sequenceController: widget.sequenceController,
@@ -62,8 +65,10 @@ class _AppShellState extends State<AppShell> {
       sequenceController: widget.sequenceController,
       sequenceHistoryController: _sequenceHistoryController,
       remoteAddressablesService: _remoteAddressablesService,
+      bookmarkController: _bookmarkController,
     );
 
+    unawaited(_bookmarkController.initialize());
     unawaited(_remoteAddressablesService.initializeLibrary());
 
     _pages = [
@@ -83,13 +88,14 @@ class _AppShellState extends State<AppShell> {
         libraryController: _libraryController,
         onBuildUnitySequence: buildAndOpenUnity,
       ),
-      const ProfileScreen(),
+      ProfileScreen(libraryController: _libraryController),
     ];
   }
 
   @override
   void dispose() {
     _libraryController.dispose();
+    _bookmarkController.dispose();
     _sequenceHistoryController.dispose();
     _remoteAddressablesService.dispose();
     super.dispose();

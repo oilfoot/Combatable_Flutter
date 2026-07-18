@@ -471,6 +471,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      isBookmarked: widget.libraryController.isBookmarked(entry.item),
+      onBookmarkToggle: () =>
+          widget.libraryController.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
           : (sourceKey) => _animateAndAdd(
@@ -496,6 +499,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       showPrimaryAction: false,
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      isBookmarked: widget.libraryController.isBookmarked(item),
+      onBookmarkToggle: () => widget.libraryController.toggleBookmark(item),
       onPrimaryAction: () async {},
     );
   }

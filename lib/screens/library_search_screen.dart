@@ -110,6 +110,9 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       buttonText: widget.libraryController.getPrimaryActionLabel(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
+      isBookmarked: widget.libraryController.isBookmarked(entry.item),
+      onBookmarkToggle: () =>
+          widget.libraryController.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
           : (sourceKey) => _animateAndAdd(

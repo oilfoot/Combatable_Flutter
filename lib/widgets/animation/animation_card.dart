@@ -21,6 +21,10 @@ class AnimationCard extends StatelessWidget {
     this.resolveCachedPreviewPath,
     this.flightKey,
     this.width = 240,
+    this.isBookmarked = false,
+    this.onBookmarkTap,
+    this.showPrimaryAction = true,
+    this.borderRadius,
   }) : variant = AnimationCardVariant.standard,
        onInfoTap = null;
 
@@ -37,7 +41,11 @@ class AnimationCard extends StatelessWidget {
   }) : variant = AnimationCardVariant.compact,
        onTap = null,
        actionLabel = null,
-       width = null;
+       width = null,
+       isBookmarked = false,
+       onBookmarkTap = null,
+       showPrimaryAction = true,
+       borderRadius = null;
 
   final AnimationLibraryItem item;
   final AnimationCardVariant variant;
@@ -51,9 +59,14 @@ class AnimationCard extends StatelessWidget {
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
   final GlobalKey? flightKey;
   final double? width;
+  final bool isBookmarked;
+  final Future<void> Function()? onBookmarkTap;
+  final bool showPrimaryAction;
+  final double? borderRadius;
 
   bool get _isCompact => variant == AnimationCardVariant.compact;
-  double get _borderRadius => _isCompact ? AppRadii.card : AppRadii.dialog;
+  double get _borderRadius =>
+      borderRadius ?? (_isCompact ? AppRadii.card : AppRadii.dialog);
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +98,15 @@ class AnimationCard extends StatelessWidget {
             ),
             if (_isCompact) ..._buildCompactOverlay(),
             if (!_isCompact) _buildStandardOverlay(),
+            if (!_isCompact && onBookmarkTap != null)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: _AnimationCardBookmarkButton(
+                  isBookmarked: isBookmarked,
+                  onPressed: onBookmarkTap!,
+                ),
+              ),
           ],
         ),
       ),
@@ -225,14 +247,49 @@ class AnimationCard extends StatelessWidget {
               shadows: [AppShadows.imageText],
             ),
           ),
-          const SizedBox(height: 10),
-          _AnimationCardActionButton(
-            label: actionLabel ?? 'Add',
-            icon: isDownloaded ? Icons.add : Icons.download_rounded,
-            isLoading: isDownloading,
-            onPressed: onPrimaryAction,
-          ),
+          if (showPrimaryAction) ...[
+            const SizedBox(height: 10),
+            _AnimationCardActionButton(
+              label: actionLabel ?? 'Add',
+              icon: isDownloaded ? Icons.add : Icons.download_rounded,
+              isLoading: isDownloading,
+              onPressed: onPrimaryAction,
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+class _AnimationCardBookmarkButton extends StatelessWidget {
+  const _AnimationCardBookmarkButton({
+    required this.isBookmarked,
+    required this.onPressed,
+  });
+
+  final bool isBookmarked;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Material(
+        color: AppColors.black.withValues(alpha: AppOpacity.strong),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () async => onPressed(),
+          child: Icon(
+            isBookmarked
+                ? Icons.bookmark_rounded
+                : Icons.bookmark_border_rounded,
+            size: 22,
+            color: isBookmarked ? AppColors.accentSoft : AppColors.textPrimary,
+          ),
+        ),
       ),
     );
   }
