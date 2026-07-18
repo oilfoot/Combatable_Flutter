@@ -123,6 +123,7 @@ class AnimationCard extends StatelessWidget {
     this.onBookmarkTap,
     this.showPrimaryAction = true,
     this.borderRadius,
+    this.primaryActionIcon,
   }) : variant = AnimationCardVariant.standard,
        onInfoTap = null;
 
@@ -143,7 +144,8 @@ class AnimationCard extends StatelessWidget {
        isBookmarked = false,
        onBookmarkTap = null,
        showPrimaryAction = true,
-       borderRadius = null;
+       borderRadius = null,
+       primaryActionIcon = null;
 
   final AnimationLibraryItem item;
   final AnimationCardVariant variant;
@@ -161,6 +163,7 @@ class AnimationCard extends StatelessWidget {
   final Future<void> Function()? onBookmarkTap;
   final bool showPrimaryAction;
   final double? borderRadius;
+  final IconData? primaryActionIcon;
 
   bool get _isCompact => variant == AnimationCardVariant.compact;
   double get _borderRadius =>
@@ -196,6 +199,16 @@ class AnimationCard extends StatelessWidget {
             ),
             if (_isCompact) ..._buildCompactOverlay(),
             if (!_isCompact) _buildStandardOverlay(),
+            if (!_isCompact && isDownloading)
+              const Center(
+                child: SizedBox.square(
+                  dimension: 42,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppColors.accentSoft,
+                  ),
+                ),
+              ),
             if (!_isCompact && onBookmarkTap != null)
               Positioned(
                 top: 10,
@@ -349,7 +362,9 @@ class AnimationCard extends StatelessWidget {
             const SizedBox(height: 10),
             _AnimationCardActionButton(
               label: actionLabel ?? 'Add',
-              icon: isDownloaded ? Icons.add : Icons.download_rounded,
+              icon:
+                  primaryActionIcon ??
+                  (isDownloaded ? Icons.add : Icons.download_rounded),
               isLoading: isDownloading,
               onPressed: onPrimaryAction,
             ),
@@ -431,36 +446,39 @@ class _AnimationCardActionButton extends StatelessWidget {
                 ),
               ),
             ),
-            child: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.accentSoft,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 21, color: AppColors.accentSoft),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.controlLabel.copyWith(
-                            color: AppColors.accentSoft,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+            child: _ActionButtonLabel(icon: icon, label: label),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ActionButtonLabel extends StatelessWidget {
+  const _ActionButtonLabel({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 21, color: AppColors.accentSoft),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.controlLabel.copyWith(
+              color: AppColors.accentSoft,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

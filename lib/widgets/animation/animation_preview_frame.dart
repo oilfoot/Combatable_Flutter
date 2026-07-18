@@ -13,11 +13,13 @@ class AnimationPreviewFrame extends StatefulWidget {
     required this.previewPath,
     required this.resolvePreviewPath,
     this.resolveCachedPreviewPath,
+    this.aspectRatio = 16 / 9,
   });
 
   final String? previewPath;
   final Future<String?> Function(String? previewPath)? resolvePreviewPath;
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
+  final double aspectRatio;
 
   @override
   State<AnimationPreviewFrame> createState() => _AnimationPreviewFrameState();
@@ -165,7 +167,7 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
     final theme = Theme.of(context);
 
     return AspectRatio(
-      aspectRatio: 16 / 9,
+      aspectRatio: widget.aspectRatio,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Container(

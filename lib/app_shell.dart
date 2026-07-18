@@ -9,6 +9,7 @@ import 'controllers/sequence_controller.dart';
 import 'controllers/sequence_history_controller.dart';
 import 'controllers/saved_sequence_controller.dart';
 import 'models/saved_sequence.dart';
+import 'models/animation_library_item.dart';
 import 'screens/full_library_screen.dart';
 import 'widgets/floating_nav_bar.dart';
 import 'screens/home_screen.dart';
@@ -73,6 +74,7 @@ class _AppShellState extends State<AppShell> {
       sequenceHistoryController: _sequenceHistoryController,
       remoteAddressablesService: _remoteAddressablesService,
       bookmarkController: _bookmarkController,
+      onViewIn3D: _viewAnimationIn3D,
     );
 
     unawaited(_bookmarkController.initialize());
@@ -103,6 +105,7 @@ class _AppShellState extends State<AppShell> {
         savedSequenceController: _savedSequenceController,
         onBuildSequence: _buildSavedSequence,
         preferencesController: _profilePreferencesController,
+        sequenceBuilderNavKey: _sequenceBuilderNavKey,
       ),
     ];
   }
@@ -154,6 +157,17 @@ class _AppShellState extends State<AppShell> {
       animations: [
         for (final animation in sequence.animations) animation.animationName,
       ],
+    );
+
+    if (!mounted) return;
+    setState(() => _currentIndex = 2);
+  }
+
+  Future<void> _viewAnimationIn3D(AnimationLibraryItem animation) async {
+    await _remoteAddressablesService.ensureUnityPrepared();
+    await widget.unityService.preparePreview(
+      sequenceName: animation.title,
+      animations: [animation.animationName],
     );
 
     if (!mounted) return;

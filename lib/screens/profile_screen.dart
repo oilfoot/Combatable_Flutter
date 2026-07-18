@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +11,8 @@ import '../models/saved_sequence.dart';
 import '../theme/app_theme.dart';
 import '../theme/profile_layout.dart';
 import '../widgets/animation/animation_info_sheet.dart';
+import '../widgets/animation/animation_card_flight.dart';
+import '../widgets/animation/animation_preview_frame.dart';
 import '../widgets/app_confirmation_dialog.dart';
 import '../widgets/profile/profile_collection_tabs.dart';
 import '../widgets/profile/profile_favorites_grid.dart';
@@ -23,18 +27,22 @@ class ProfileScreen extends StatefulWidget {
     required this.savedSequenceController,
     required this.onBuildSequence,
     required this.preferencesController,
+    required this.sequenceBuilderNavKey,
   });
 
   final LibraryController libraryController;
   final SavedSequenceController savedSequenceController;
   final Future<void> Function(SavedSequence sequence) onBuildSequence;
   final ProfilePreferencesController preferencesController;
+  final GlobalKey sequenceBuilderNavKey;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  static const _arrivalHapticDelay = Duration(milliseconds: 90);
+
   String? _buildingSequenceId;
 
   ProfileCollection get _selectedCollection =>
@@ -99,13 +107,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
       item: entry.item,
       isDownloaded: entry.isInstalled,
       isDownloading: entry.isDownloading,
-      buttonText: library.getPrimaryActionLabel(entry),
+      buttonText: library.getAddActionLabel(entry),
+      showPrimaryAction: entry.isInstalled,
+      viewIn3DLabel: library.getViewActionLabel(entry),
+      onViewIn3D: () => library.performViewAction(entry),
       resolvePreviewPath: library.getOrDownloadPreview,
       resolveCachedPreviewPath: library.getCachedPreviewPath,
       isBookmarked: library.isBookmarked(entry.item),
       onBookmarkToggle: () => library.toggleBookmark(entry.item),
-      onPrimaryAction: () => library.performPrimaryAction(entry),
+      onAnimatedPrimaryAction: (sourceKey) => _animateAndAdd(sourceKey, entry),
+      onPrimaryAction: () => _handleFavoriteAdd(entry),
     );
+  }
+
+  Future<void> _handleFavoriteAdd(LibraryDisplayItem entry) async {
+    try {
+      await widget.libraryController.performPrimaryAction(entry);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('Could not add ${entry.item.title}: $error'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.elevatedSurface,
+          ),
+        );
+    }
+  }
+
+  Future<void> _animateAndAdd(
+    GlobalKey sourceKey,
+    LibraryDisplayItem entry, {
+    Size? flightSize,
+  }) async {
+    unawaited(HapticFeedback.lightImpact());
+
+    final library = widget.libraryController;
+    final cachedPreviewPath = library.getCachedPreviewPath(
+      entry.item.previewPath,
+    );
+
+    await AnimationCardFlight.run(
+      sourceKey: sourceKey,
+      targetKey: widget.sequenceBuilderNavKey,
+      finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
+      scaleEnd: AnimationCardFlightTuning.detailMorphScaleEnd,
+      morphFrame: true,
+      flightSize: flightSize,
+      fadeOut: false,
+      flightChild: AnimationPreviewFrame(
+        previewPath: cachedPreviewPath ?? entry.item.previewPath,
+        resolvePreviewPath: library.getOrDownloadPreview,
+        resolveCachedPreviewPath: library.getCachedPreviewPath,
+      ),
+      actionTiming: AnimationFlightActionTiming.alongsideFlight,
+      action: () => _handleFavoriteAdd(entry),
+    );
+
+    await Future<void>.delayed(_arrivalHapticDelay);
+    await HapticFeedback.heavyImpact();
   }
 
   Future<void> _removeBookmarkWithConfirmation(LibraryDisplayItem entry) async {

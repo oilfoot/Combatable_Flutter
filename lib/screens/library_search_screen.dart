@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
-import '../widgets/animation/animation_card.dart';
 import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_preview_frame.dart';
@@ -107,7 +106,10 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       item: entry.item,
       isDownloaded: entry.isInstalled,
       isDownloading: entry.isDownloading,
-      buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+      buttonText: widget.libraryController.getAddActionLabel(entry),
+      showPrimaryAction: entry.isInstalled,
+      viewIn3DLabel: widget.libraryController.getViewActionLabel(entry),
+      onViewIn3D: () => widget.libraryController.performViewAction(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       isBookmarked: widget.libraryController.isBookmarked(entry.item),
@@ -115,11 +117,7 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
           widget.libraryController.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
-          : (sourceKey) => _animateAndAdd(
-              sourceKey,
-              entry,
-              flightSize: const Size.square(AnimationCard.compactExtent),
-            ),
+          : (sourceKey) => _animateAndAdd(sourceKey, entry),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }
@@ -151,7 +149,9 @@ class _LibrarySearchScreenState extends State<LibrarySearchScreen> {
       sourceKey: sourceKey,
       targetKey: widget.sequenceBuilderNavKey,
       finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-      flightSize: flightSize ?? const Size.square(AnimationCard.compactExtent),
+      scaleEnd: AnimationCardFlightTuning.detailMorphScaleEnd,
+      morphFrame: true,
+      flightSize: flightSize,
       fadeOut: false,
       flightChild: AnimationPreviewFrame(
         previewPath: cachedPreviewPath ?? entry.item.previewPath,

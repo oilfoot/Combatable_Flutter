@@ -570,7 +570,10 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       item: entry.item,
       isDownloaded: entry.isInstalled,
       isDownloading: entry.isDownloading,
-      buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+      buttonText: widget.libraryController.getAddActionLabel(entry),
+      showPrimaryAction: entry.isInstalled,
+      viewIn3DLabel: widget.libraryController.getViewActionLabel(entry),
+      onViewIn3D: () => widget.libraryController.performViewAction(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       isBookmarked: widget.libraryController.isBookmarked(entry.item),
@@ -581,9 +584,8 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
           : (sourceKey) => _animateAndAdd(
               sourceKey,
               entry,
-              flightSize: const Size.square(
-                SequenceBuilderLibrary.animationCardExtent,
-              ),
+              scaleEnd: AnimationCardFlightTuning.detailMorphScaleEnd,
+              morphFrame: true,
             ),
       onPrimaryAction: () async {
         await _handlePrimaryAction(entry);
@@ -599,6 +601,15 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
       isDownloading: false,
       buttonText: 'Add',
       showPrimaryAction: false,
+      viewIn3DLabel: 'View in 3D',
+      onViewIn3D: () => widget.libraryController.performViewAction(
+        LibraryDisplayItem(
+          item: item,
+          isRemote: item.addressKey != null,
+          isInstalled: true,
+          isDownloading: false,
+        ),
+      ),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       isBookmarked: widget.libraryController.isBookmarked(item),

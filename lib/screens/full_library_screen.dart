@@ -50,7 +50,10 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       item: entry.item,
       isDownloaded: entry.isInstalled,
       isDownloading: entry.isDownloading,
-      buttonText: widget.libraryController.getPrimaryActionLabel(entry),
+      buttonText: widget.libraryController.getAddActionLabel(entry),
+      showPrimaryAction: entry.isInstalled,
+      viewIn3DLabel: widget.libraryController.getViewActionLabel(entry),
+      onViewIn3D: () => _handleViewAction(entry),
       resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
       resolveCachedPreviewPath: widget.libraryController.getCachedPreviewPath,
       isBookmarked: widget.libraryController.isBookmarked(entry.item),
@@ -58,11 +61,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           widget.libraryController.toggleBookmark(entry.item),
       onAnimatedPrimaryAction: widget.libraryController.requiresDownload(entry)
           ? null
-          : (sourceKey) => _animateAndAdd(
-              sourceKey,
-              entry,
-              flightSize: const Size.square(AnimationCard.compactExtent),
-            ),
+          : (sourceKey) => _animateAndAdd(sourceKey, entry),
       onPrimaryAction: () => _handlePrimaryAction(entry),
     );
   }
@@ -74,6 +73,17 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Failed to add ${entry.item.title}: $e')),
+      );
+    }
+  }
+
+  Future<void> _handleViewAction(LibraryDisplayItem entry) async {
+    try {
+      await widget.libraryController.performViewAction(entry);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open ${entry.item.title} in 3D: $e')),
       );
     }
   }
@@ -93,7 +103,9 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
       sourceKey: sourceKey,
       targetKey: widget.sequenceBuilderNavKey,
       finalScale: AnimationCardFlightTuning.fullLibraryFinalScale,
-      flightSize: flightSize ?? const Size.square(AnimationCard.compactExtent),
+      scaleEnd: AnimationCardFlightTuning.detailMorphScaleEnd,
+      morphFrame: true,
+      flightSize: flightSize,
       fadeOut: false,
       flightChild: AnimationPreviewFrame(
         previewPath: cachedPreviewPath ?? entry.item.previewPath,
@@ -149,7 +161,8 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 item: entry.item,
                 isDownloaded: entry.isInstalled,
                 isDownloading: entry.isDownloading,
-                actionLabel: library.getPrimaryActionLabel(entry),
+                actionLabel: library.getViewActionLabel(entry),
+                primaryActionIcon: Icons.view_in_ar_rounded,
                 isBookmarked: library.isBookmarked(entry.item),
                 onBookmarkTap: () async {
                   await HapticFeedback.selectionClick();
@@ -158,13 +171,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                 resolvePreviewPath: library.getOrDownloadPreview,
                 resolveCachedPreviewPath: library.getCachedPreviewPath,
                 onTap: () => _showAnimationInfo(entry),
-                onPrimaryAction: () {
-                  if (library.requiresDownload(entry)) {
-                    return _handlePrimaryAction(entry);
-                  }
-
-                  return _animateAndAdd(flightKey, entry);
-                },
+                onPrimaryAction: () => _handleViewAction(entry),
               );
             },
           ),

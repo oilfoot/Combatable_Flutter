@@ -496,6 +496,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     GlobalKey sourceKey,
     LibraryDisplayItem entry, {
     Size? flightSize,
+    double scaleEnd = 1,
+    bool morphFrame = false,
   }) async {
     if (_activeVisualRemovals > 0) return;
 
@@ -511,6 +513,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         sourceKey,
         entry,
         flightSize: flightSize,
+        scaleEnd: scaleEnd,
+        morphFrame: morphFrame,
       );
       return;
     }
@@ -532,6 +536,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
             : (_) => transition.flightTarget!,
         finalScale: AnimationCardFlightTuning.collapsedBuilderFinalScale,
         flightSize: flightSize,
+        scaleEnd: scaleEnd,
+        morphFrame: morphFrame,
         fadeOut: false,
         preventDownwardFlight: true,
         duration: transition.usesLongScrollFlight
@@ -540,7 +546,9 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         arcLift: transition.usesLongScrollFlight
             ? AnimationCardFlightTuning.sequenceBuilderLongScrollArcLift
             : AnimationCardFlightTuning.sequenceBuilderArcLift,
-        scaleStart: transition.usesLongScrollFlight
+        scaleStart: scaleEnd < 1
+            ? 0
+            : transition.usesLongScrollFlight
             ? AnimationCardFlightTuning.sequenceBuilderLongScrollScaleStart
             : AnimationCardFlightTuning.sequenceBuilderScaleStart,
         flightChild: AnimationPreviewFrame(
@@ -568,6 +576,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     GlobalKey sourceKey,
     LibraryDisplayItem entry, {
     Size? flightSize,
+    double scaleEnd = 1,
+    bool morphFrame = false,
   }) async {
     _activeVisualAddFlights++;
     final cachedPreviewPath = widget.libraryController.getCachedPreviewPath(
@@ -581,6 +591,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         destination: _expandedPanelDestination,
         finalScale: AnimationCardFlightTuning.expandedBuilderFinalScale,
         flightSize: flightSize,
+        scaleEnd: scaleEnd,
+        morphFrame: morphFrame,
         fadeOut: false,
         flightChild: AnimationPreviewFrame(
           previewPath: cachedPreviewPath ?? entry.item.previewPath,

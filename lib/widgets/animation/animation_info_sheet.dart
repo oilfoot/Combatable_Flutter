@@ -21,6 +21,9 @@ class AnimationInfoSheet extends StatelessWidget {
     this.resolveCachedPreviewPath,
     this.isBookmarked = false,
     this.onBookmarkToggle,
+    this.viewIn3DLabel = 'View in 3D',
+    this.onViewIn3D,
+    this.viewIn3DEnabled = true,
   });
 
   final AnimationLibraryItem item;
@@ -34,6 +37,9 @@ class AnimationInfoSheet extends StatelessWidget {
   final String? Function(String? previewPath)? resolveCachedPreviewPath;
   final bool isBookmarked;
   final Future<void> Function()? onBookmarkToggle;
+  final String viewIn3DLabel;
+  final Future<void> Function()? onViewIn3D;
+  final bool viewIn3DEnabled;
 
   static Future<void> show(
     BuildContext context, {
@@ -48,12 +54,16 @@ class AnimationInfoSheet extends StatelessWidget {
     String? Function(String? previewPath)? resolveCachedPreviewPath,
     bool isBookmarked = false,
     Future<void> Function()? onBookmarkToggle,
+    String viewIn3DLabel = 'View in 3D',
+    Future<void> Function()? onViewIn3D,
+    bool viewIn3DEnabled = true,
   }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+      barrierColor: AppColors.black.withValues(alpha: AppOpacity.barrier),
       builder: (_) {
         return AnimationInfoSheet(
           item: item,
@@ -67,6 +77,9 @@ class AnimationInfoSheet extends StatelessWidget {
           resolveCachedPreviewPath: resolveCachedPreviewPath,
           isBookmarked: isBookmarked,
           onBookmarkToggle: onBookmarkToggle,
+          viewIn3DLabel: viewIn3DLabel,
+          onViewIn3D: onViewIn3D,
+          viewIn3DEnabled: viewIn3DEnabled,
         );
       },
     );
@@ -74,61 +87,101 @@ class AnimationInfoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final primaryActionKey = GlobalKey(
       debugLabel: 'animation-info-primary-action',
     );
+    final previewFlightKey = GlobalKey(
+      debugLabel: 'animation-info-preview-flight-source',
+    );
+    final description = item.description?.trim();
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.78,
-      minChildSize: 0.55,
-      maxChildSize: 0.95,
+      initialChildSize: 0.92,
+      minChildSize: 0.72,
+      maxChildSize: 0.97,
       expand: false,
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 30,
-                color: Colors.black26,
-                offset: Offset(0, -4),
-              ),
-            ],
+            color: AppColors.panel,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadii.panel),
+            ),
+            border: Border.all(color: AppColors.borderSubtle),
+            boxShadow: [AppShadows.panel],
           ),
           child: Column(
             children: [
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.sm),
               Container(
                 width: 44,
-                height: 5,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.textSecondary,
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
                 ),
               ),
-              const SizedBox(height: 14),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Animation',
+                        style: AppTypography.sectionTitle,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
               Expanded(
                 child: SingleChildScrollView(
                   controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    0,
+                    AppSpacing.xl,
+                    AppSpacing.xxl,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AnimationPreviewFrame(
-                        previewPath: item.previewPath,
-                        resolvePreviewPath: resolvePreviewPath,
-                        resolveCachedPreviewPath: resolveCachedPreviewPath,
+                      RepaintBoundary(
+                        key: previewFlightKey,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadii.card),
+                          child: AspectRatio(
+                            aspectRatio: 1,
+                            child: AnimationPreviewFrame(
+                              previewPath: item.previewPath,
+                              aspectRatio: 1,
+                              resolvePreviewPath: resolvePreviewPath,
+                              resolveCachedPreviewPath:
+                                  resolveCachedPreviewPath,
+                            ),
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: AppSpacing.xl),
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
                             child: Text(
                               item.title,
-                              style: theme.textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
+                              style: AppTypography.screenTitle.copyWith(
+                                color: AppColors.textPrimary,
                               ),
                             ),
                           ),
@@ -141,12 +194,11 @@ class AnimationInfoSheet extends StatelessWidget {
                           ],
                         ],
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: AppSpacing.md),
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
                         children: [
-                          _InfoChip(label: 'Clip', value: item.animationName),
                           _InfoChip(label: 'Start', value: item.startPosition),
                           _InfoChip(label: 'End', value: item.endPosition),
                           _InfoChip(
@@ -159,72 +211,122 @@ class AnimationInfoSheet extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Text(
-                        'Animation Details',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                      if (description != null && description.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        const Text(
+                          'About this animation',
+                          style: AppTypography.componentTitle,
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          description,
+                          style: AppTypography.body.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                      if (item.tags.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            for (final tag in item.tags) _TagChip(label: tag),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                  AppSpacing.xl,
+                  AppSpacing.lg,
+                ),
+                child: Column(
+                  children: [
+                    if (onViewIn3D != null)
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: isDownloading || !viewIn3DEnabled
+                              ? null
+                              : () async {
+                                  await HapticFeedback.selectionClick();
+                                  await onViewIn3D!();
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(56),
+                            backgroundColor: AppColors.accent,
+                            foregroundColor: AppColors.textPrimary,
+                            disabledBackgroundColor: AppColors.surface,
+                            disabledForegroundColor: AppColors.textDisabled,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.button,
+                              ),
+                            ),
+                            textStyle: AppTypography.button,
+                          ),
+                          icon: const Icon(Icons.view_in_ar_rounded),
+                          label: Text(viewIn3DLabel),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'This is the animation detail sheet. For now it only shows the basic information and action button. Later we can add thumbnail, category, tags, description, muscles, difficulty, positions, preview actions, and anything else you want.',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: Colors.white70,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      if (showPrimaryAction) ...[
-                        RepaintBoundary(
-                          key: primaryActionKey,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: isDownloading
-                                  ? null
-                                  : () async {
-                                      final animatedAction =
-                                          onAnimatedPrimaryAction;
-
-                                      if (animatedAction == null) {
-                                        await onPrimaryAction();
-                                        if (context.mounted) {
-                                          Navigator.of(context).pop();
-                                        }
-                                        return;
-                                      }
-
-                                      final flight = animatedAction(
-                                        primaryActionKey,
-                                      );
-
+                    if (onViewIn3D != null && showPrimaryAction)
+                      const SizedBox(height: AppSpacing.buttonGap),
+                    if (showPrimaryAction)
+                      RepaintBoundary(
+                        key: primaryActionKey,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: isDownloading
+                                ? null
+                                : () async {
+                                    final animatedAction =
+                                        onAnimatedPrimaryAction;
+                                    if (animatedAction == null) {
+                                      await onPrimaryAction();
                                       if (context.mounted) {
                                         Navigator.of(context).pop();
                                       }
+                                      return;
+                                    }
 
-                                      unawaited(flight);
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
+                                    final flight = animatedAction(
+                                      previewFlightKey,
+                                    );
+                                    if (context.mounted) {
+                                      Navigator.of(context).pop();
+                                    }
+                                    unawaited(flight);
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(52),
+                              foregroundColor: AppColors.accentSoft,
+                              side: const BorderSide(
+                                color: AppColors.borderStrong,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadii.button,
                                 ),
                               ),
-                              child: Text(buttonText),
+                              textStyle: AppTypography.controlLabel,
                             ),
+                            icon: const Icon(Icons.playlist_add_rounded),
+                            label: Text(buttonText),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Close'),
-                        ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ],
@@ -297,31 +399,52 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.medium),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.white60,
-              fontWeight: FontWeight.w600,
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTypography.label.copyWith(color: AppColors.textPrimary),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  const _TagChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: AppOpacity.subtle),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(
+          color: AppColors.accentSoft.withValues(alpha: AppOpacity.muted),
+        ),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(color: AppColors.accentSoft),
       ),
     );
   }

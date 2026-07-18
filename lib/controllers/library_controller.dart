@@ -27,10 +27,12 @@ class LibraryController extends ChangeNotifier {
     required SequenceHistoryController sequenceHistoryController,
     required RemoteAddressablesService remoteAddressablesService,
     required BookmarkController bookmarkController,
+    required Future<void> Function(AnimationLibraryItem item) onViewIn3D,
   }) : _sequenceController = sequenceController,
        _sequenceHistoryController = sequenceHistoryController,
        _remoteAddressablesService = remoteAddressablesService,
-       _bookmarkController = bookmarkController {
+       _bookmarkController = bookmarkController,
+       _onViewIn3D = onViewIn3D {
     _sequenceController.addListener(_onDependenciesChanged);
     _remoteAddressablesService.addListener(_onDependenciesChanged);
     _bookmarkController.addListener(_onDependenciesChanged);
@@ -40,6 +42,7 @@ class LibraryController extends ChangeNotifier {
   final SequenceHistoryController _sequenceHistoryController;
   final RemoteAddressablesService _remoteAddressablesService;
   final BookmarkController _bookmarkController;
+  final Future<void> Function(AnimationLibraryItem item) _onViewIn3D;
 
   String? _selectedCategoryId;
 
@@ -191,9 +194,17 @@ class LibraryController extends ChangeNotifier {
   }
 
   String getPrimaryActionLabel(LibraryDisplayItem entry) {
+    return getAddActionLabel(entry);
+  }
+
+  String getAddActionLabel(LibraryDisplayItem entry) {
     if (entry.isDownloading) return 'Downloading...';
     if (requiresDownload(entry)) return 'Download';
-    return 'Add';
+    return 'Add to timeline';
+  }
+
+  String getViewActionLabel(LibraryDisplayItem entry) {
+    return 'View in 3D';
   }
 
   bool requiresDownload(LibraryDisplayItem entry) {
@@ -222,6 +233,17 @@ class LibraryController extends ChangeNotifier {
       entry.item,
       transitionId: transitionId,
     );
+  }
+
+  Future<void> performViewAction(LibraryDisplayItem entry) async {
+    if (entry.isDownloading) return;
+
+    if (requiresDownload(entry)) {
+      await download(entry);
+      return;
+    }
+
+    await _onViewIn3D(entry.item);
   }
 
   void _onDependenciesChanged() {

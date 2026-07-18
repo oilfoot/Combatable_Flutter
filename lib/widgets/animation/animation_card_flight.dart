@@ -32,11 +32,16 @@ abstract final class AnimationCardFlightTuning {
   static const double sequenceBuilderLongScrollArcLift = 400;
   static const double sequenceBuilderScaleStart = 0;
   static const double sequenceBuilderLongScrollScaleStart = 0.35;
+
+  /// Detail-sheet previews reach their compact flight size early, while the
+  /// position animation continues for the full duration.
+  static const double detailMorphScaleEnd = 0.28;
   static const double maxRotation = 0.07;
   static const double minimumUpwardClearance = 12;
 
   /// Keeps bright and dark preview images readable while they are in flight.
   static const double ghostCornerRadius = 14;
+  static const double detailPreviewCornerRadius = 18;
   static const double ghostStrokeWidth = 1;
   static const Color ghostStrokeColor = Color(0x40FFFFFF);
   static const Color ghostShadowColor = Color(0x73000000);
@@ -73,6 +78,8 @@ class AnimationCardFlight {
     Duration duration = AnimationCardFlightTuning.duration,
     double arcLift = AnimationCardFlightTuning.arcLift,
     double scaleStart = 0,
+    double scaleEnd = 1,
+    bool morphFrame = false,
     Size? flightSize,
     Widget? flightChild,
     AnimationFlightActionTiming actionTiming =
@@ -173,6 +180,8 @@ class AnimationCardFlight {
           duration: duration,
           arcLift: arcLift,
           scaleStart: scaleStart,
+          scaleEnd: scaleEnd,
+          morphFrame: morphFrame,
           onCompleted: () {
             entry.remove();
             cardImage?.dispose();
@@ -223,6 +232,8 @@ class _AnimationCardFlightOverlay extends StatefulWidget {
     required this.duration,
     required this.arcLift,
     required this.scaleStart,
+    required this.scaleEnd,
+    required this.morphFrame,
     required this.onCompleted,
   });
 
@@ -238,6 +249,8 @@ class _AnimationCardFlightOverlay extends StatefulWidget {
   final Duration duration;
   final double arcLift;
   final double scaleStart;
+  final double scaleEnd;
+  final bool morphFrame;
   final VoidCallback onCompleted;
 
   @override
@@ -279,6 +292,15 @@ class _AnimationCardFlightOverlayState
           builder: (context, _) {
             final t = _progress.value;
             final scale = _scaleAt(t);
+            final frameMorphProgress = widget.morphFrame
+                ? _scaleProgressAt(t)
+                : 1.0;
+            final frameSize = widget.morphFrame
+                ? Size(
+                    widget.sourceRect.width * scale,
+                    widget.sourceRect.height * scale,
+                  )
+                : widget.sourceRect.size;
             final center = widget.behindTop == null
                 ? _standardCenter(t)
                 : _behindPanelCenter(t);
@@ -294,17 +316,18 @@ class _AnimationCardFlightOverlayState
             Widget flight = Stack(
               children: [
                 Positioned(
-                  left: center.dx - widget.sourceRect.width / 2,
-                  top: center.dy - widget.sourceRect.height / 2,
-                  width: widget.sourceRect.width,
-                  height: widget.sourceRect.height,
+                  left: center.dx - frameSize.width / 2,
+                  top: center.dy - frameSize.height / 2,
+                  width: frameSize.width,
+                  height: frameSize.height,
                   child: Opacity(
                     opacity: opacity,
-                    child: Transform.scale(
-                      scale: scale,
-                      child: Transform.rotate(
-                        angle: rotation,
+                    child: Transform.rotate(
+                      angle: rotation,
+                      child: Transform.scale(
+                        scale: widget.morphFrame ? 1 : scale,
                         child: _FlightGhostFrame(
+                          morphProgress: frameMorphProgress,
                           child: widget.image == null
                               ? widget.flightChild ??
                                     const _FallbackFlightCard()
@@ -357,10 +380,11 @@ class _AnimationCardFlightOverlayState
         widget.targetCenterProvider?.call() ?? widget.targetCenter;
     final exitProgress = AnimationCardFlightTuning.behindExitProgress;
     final exitScale = _scaleAt(exitProgress);
+    final exitHeight = widget.sourceRect.height * exitScale;
     final exitCenter = Offset(
       targetCenter.dx,
       widget.behindTop! -
-          widget.sourceRect.height * exitScale / 2 -
+          exitHeight / 2 -
           AnimationCardFlightTuning.behindExitClearance,
     );
 
@@ -382,9 +406,17 @@ class _AnimationCardFlightOverlayState
   }
 
   double _scaleAt(double t) {
-    final scaleProgress = ((t - widget.scaleStart) / (1 - widget.scaleStart))
-        .clamp(0.0, 1.0);
+    final scaleProgress = _scaleProgressAt(t);
     return ui.lerpDouble(1, widget.finalScale, scaleProgress) ?? 1;
+  }
+
+  double _scaleProgressAt(double t) {
+    final scaleDuration = math.max(0.0001, widget.scaleEnd - widget.scaleStart);
+    final scaleProgress = ((t - widget.scaleStart) / scaleDuration).clamp(
+      0.0,
+      1.0,
+    );
+    return scaleProgress;
   }
 
   Offset _controlPoint(Offset start, Offset end) {
@@ -408,20 +440,35 @@ class _AnimationCardFlightOverlayState
 }
 
 class _FlightGhostFrame extends StatelessWidget {
-  const _FlightGhostFrame({required this.child});
+  const _FlightGhostFrame({required this.child, this.morphProgress = 1});
 
   final Widget child;
+  final double morphProgress;
 
   @override
   Widget build(BuildContext context) {
-    const radius = AnimationCardFlightTuning.ghostCornerRadius;
+    final radius = ui.lerpDouble(
+      AnimationCardFlightTuning.detailPreviewCornerRadius,
+      AnimationCardFlightTuning.ghostCornerRadius,
+      morphProgress,
+    )!;
+    final strokeWidth = ui.lerpDouble(
+      0,
+      AnimationCardFlightTuning.ghostStrokeWidth,
+      morphProgress,
+    )!;
+    final shadowColor = Color.lerp(
+      Colors.transparent,
+      AnimationCardFlightTuning.ghostShadowColor,
+      morphProgress,
+    )!;
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: AnimationCardFlightTuning.ghostShadowColor,
+            color: shadowColor,
             blurRadius: AnimationCardFlightTuning.ghostShadowBlur,
             spreadRadius: AnimationCardFlightTuning.ghostShadowSpread,
           ),
@@ -431,13 +478,11 @@ class _FlightGhostFrame extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(
           color: AnimationCardFlightTuning.ghostStrokeColor,
-          width: AnimationCardFlightTuning.ghostStrokeWidth,
+          width: strokeWidth,
         ),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(
-          radius - AnimationCardFlightTuning.ghostStrokeWidth,
-        ),
+        borderRadius: BorderRadius.circular(math.max(0, radius - strokeWidth)),
         child: child,
       ),
     );
