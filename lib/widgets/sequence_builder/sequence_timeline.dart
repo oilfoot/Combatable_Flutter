@@ -1087,11 +1087,7 @@ class _DeletionOutgoingText extends StatelessWidget {
             ],
           ),
         ),
-        Icon(
-          Icons.delete_outline_rounded,
-          size: 20,
-          color: AppColors.textSecondary,
-        ),
+        Icon(Icons.close_rounded, size: 20, color: AppColors.textSecondary),
       ],
     );
   }
@@ -1243,7 +1239,7 @@ class _TimelineAnimationTile extends StatelessWidget {
                       opacity: textProgress,
                       child: IconButton(
                         onPressed: onRemove,
-                        icon: const Icon(Icons.delete_outline),
+                        icon: const Icon(Icons.close_rounded),
                       ),
                     ),
                   ],

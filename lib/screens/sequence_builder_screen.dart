@@ -22,7 +22,7 @@ part '../widgets/sequence_builder/sequence_builder_chrome.dart';
 const _timelinePlaceholderRevealDelay = Duration(milliseconds: 324);
 const double _timelinePostRevealBottomClearance = 32;
 const double _timelinePostRevealOverflowThreshold = 4;
-const double _sequenceControlsHeaderExtent = 220;
+const double _sequenceControlsHeaderExtent = 196;
 
 enum _QueuedHistoryAction { undo, redo }
 
