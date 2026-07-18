@@ -36,6 +36,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   static const String _remoteFolder = 'addressables/iOS';
   static const String _mainManifestFileName = 'main_manifest.json';
+  static const Duration _mainManifestRefreshInterval = Duration(hours: 6);
 
   String _status = 'Remote library not loaded yet.';
   String? _addressablesDirPath;
@@ -57,6 +58,7 @@ class RemoteAddressablesService extends ChangeNotifier {
   final Set<String> _loadedCategoryIds = {};
   final Set<String> _loadingCategoryIds = {};
   final Map<String, Future<String?>> _previewDownloadFutures = {};
+  final Map<String, String> _cachedPreviewPaths = {};
 
   String get status => _status;
   String? get addressablesDirPath => _addressablesDirPath;
@@ -75,6 +77,18 @@ class RemoteAddressablesService extends ChangeNotifier {
       List.unmodifiable(_downloadedItems);
   List<String> get downloadedJsonPaths =>
       List.unmodifiable(_downloadedJsonPaths);
+  int get expectedAnimationCount =>
+      _categories.fold(0, (total, category) => total + category.count);
+  int expectedAnimationCountForCategory(String categoryId) {
+    for (final category in _categories) {
+      if (category.id == categoryId) return category.count;
+    }
+    return 0;
+  }
+
+  int loadedAnimationCountForCategory(String categoryId) {
+    return _availableItems.where((item) => item.category == categoryId).length;
+  }
 
   bool get hasDownloadedContent =>
       _catalogPath != null &&
@@ -94,6 +108,11 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     if (trimmedPreviewPath == null || trimmedPreviewPath.isEmpty) {
       return null;
+    }
+
+    final rememberedPath = _cachedPreviewPaths[trimmedPreviewPath];
+    if (rememberedPath != null && File(rememberedPath).existsSync()) {
+      return rememberedPath;
     }
 
     if (trimmedPreviewPath.startsWith('/')) {
@@ -125,14 +144,25 @@ class RemoteAddressablesService extends ChangeNotifier {
       return null;
     }
 
-    final filename = trimmedPreviewPath.split('/').last.trim();
+    final filename = _previewCacheFilename(trimmedPreviewPath);
 
     if (filename.isEmpty) {
       return null;
     }
 
     final localPreviewFile = File('$addressablesDirPath/previews/$filename');
-    return localPreviewFile.existsSync() ? localPreviewFile.path : null;
+    if (localPreviewFile.existsSync()) {
+      _cachedPreviewPaths[trimmedPreviewPath] = localPreviewFile.path;
+      return localPreviewFile.path;
+    }
+
+    final legacyFilename = trimmedPreviewPath.split('/').last.trim();
+    final legacyFile = File('$addressablesDirPath/previews/$legacyFilename');
+    if (legacyFile.existsSync()) {
+      _cachedPreviewPaths[trimmedPreviewPath] = legacyFile.path;
+      return legacyFile.path;
+    }
+    return null;
   }
 
   Future<String?> getOrDownloadPreview(String? previewPath) async {
@@ -187,7 +217,7 @@ class RemoteAddressablesService extends ChangeNotifier {
     }
   }
 
-  Future<void> initializeLibrary() async {
+  Future<void> initializeLibrary({bool forceRefresh = false}) async {
     if (_isInitializing) return;
 
     _isInitializing = true;
@@ -216,8 +246,12 @@ class RemoteAddressablesService extends ChangeNotifier {
         notifyListeners();
       }
 
-      await _downloadMainManifestToLocal(addressablesDir: addressablesDir);
+      await _downloadMainManifestToLocal(
+        addressablesDir: addressablesDir,
+        forceRefresh: forceRefresh,
+      );
       await _restoreStateFromDisk(addressablesDir: addressablesDir);
+      await _loadMissingCategoryManifests();
 
       _status =
           'Remote library ready.\n'
@@ -241,7 +275,21 @@ class RemoteAddressablesService extends ChangeNotifier {
   }
 
   Future<void> refreshLibrary() async {
-    await initializeLibrary();
+    await initializeLibrary(forceRefresh: true);
+  }
+
+  Future<void> _loadMissingCategoryManifests() async {
+    for (final category in List<RemoteAnimationCategory>.of(_categories)) {
+      if (_loadedCategoryIds.contains(category.id)) continue;
+      try {
+        await loadCategory(category.id);
+      } catch (error) {
+        debugPrint(
+          '[RemoteAddressablesService] Failed to preload '
+          '${category.id}: $error',
+        );
+      }
+    }
   }
 
   Future<void> loadCategory(String categoryId) async {
@@ -290,9 +338,15 @@ class RemoteAddressablesService extends ChangeNotifier {
 
       await localCategoryFile.parent.create(recursive: true);
 
-      await _firebaseStorage
-          .ref('$_remoteFolder/${categoryRef.manifest}')
-          .writeToFile(localCategoryFile);
+      await _downloadFileAtomically(
+        reference: _firebaseStorage.ref(
+          '$_remoteFolder/${categoryRef.manifest}',
+        ),
+        destination: localCategoryFile,
+        validateContent: (content) {
+          _parseCategoryManifest(content);
+        },
+      );
 
       final categoryContent = await localCategoryFile.readAsString();
       final loadedEntries = _parseCategoryManifest(categoryContent);
@@ -499,6 +553,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
   Future<void> _downloadMainManifestToLocal({
     required Directory addressablesDir,
+    required bool forceRefresh,
   }) async {
     final manifestRef = _firebaseStorage.ref(
       '$_remoteFolder/$_mainManifestFileName',
@@ -508,7 +563,21 @@ class RemoteAddressablesService extends ChangeNotifier {
       '${addressablesDir.path}/$_mainManifestFileName',
     );
 
-    await manifestRef.writeToFile(manifestLocalFile);
+    if (!forceRefresh && await manifestLocalFile.exists()) {
+      final modifiedAt = await manifestLocalFile.lastModified();
+      if (DateTime.now().difference(modifiedAt) <
+          _mainManifestRefreshInterval) {
+        return;
+      }
+    }
+
+    await _downloadFileAtomically(
+      reference: manifestRef,
+      destination: manifestLocalFile,
+      validateContent: (content) {
+        _parseMainManifest(content);
+      },
+    );
 
     if (!await manifestLocalFile.exists()) {
       throw Exception('Main manifest file was not downloaded.');
@@ -846,7 +915,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       await previewsDir.create(recursive: true);
     }
 
-    final filename = remotePreviewPath.split('/').last;
+    final filename = _previewCacheFilename(remotePreviewPath);
 
     if (filename.trim().isEmpty) {
       return null;
@@ -855,18 +924,57 @@ class RemoteAddressablesService extends ChangeNotifier {
     final localPreviewFile = File('${previewsDir.path}/$filename');
 
     if (await localPreviewFile.exists()) {
+      _cachedPreviewPaths[remotePreviewPath] = localPreviewFile.path;
       return localPreviewFile.path;
     }
 
-    await _firebaseStorage
-        .ref(_storageRefPath(remotePreviewPath))
-        .writeToFile(localPreviewFile);
+    final legacyFilename = remotePreviewPath.split('/').last;
+    final legacyFile = File('${previewsDir.path}/$legacyFilename');
+    if (await legacyFile.exists()) {
+      _cachedPreviewPaths[remotePreviewPath] = legacyFile.path;
+      return legacyFile.path;
+    }
+
+    await _downloadFileAtomically(
+      reference: _firebaseStorage.ref(_storageRefPath(remotePreviewPath)),
+      destination: localPreviewFile,
+    );
 
     if (await localPreviewFile.exists()) {
+      _cachedPreviewPaths[remotePreviewPath] = localPreviewFile.path;
       return localPreviewFile.path;
     }
 
     return null;
+  }
+
+  String _previewCacheFilename(String remotePreviewPath) {
+    return remotePreviewPath.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  }
+
+  Future<void> _downloadFileAtomically({
+    required Reference reference,
+    required File destination,
+    void Function(String content)? validateContent,
+  }) async {
+    await destination.parent.create(recursive: true);
+    final partialFile = File('${destination.path}.part');
+
+    try {
+      if (await partialFile.exists()) await partialFile.delete();
+      await reference.writeToFile(partialFile);
+      if (await partialFile.length() == 0) {
+        throw const FileSystemException('Downloaded file is empty.');
+      }
+      if (validateContent != null) {
+        validateContent(await partialFile.readAsString());
+      }
+      if (await destination.exists()) await destination.delete();
+      await partialFile.rename(destination.path);
+    } catch (_) {
+      if (await partialFile.exists()) await partialFile.delete();
+      rethrow;
+    }
   }
 
   File _localFileForRemotePath({

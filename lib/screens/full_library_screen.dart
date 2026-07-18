@@ -112,6 +112,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
     final library = widget.libraryController;
     final theme = Theme.of(context);
     final items = library.categoryFilteredItems;
+    final placeholderCount = library.metadataPlaceholderCount;
 
     return Scaffold(
       body: Stack(
@@ -129,8 +130,14 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
               crossAxisSpacing: 14,
               childAspectRatio: 0.62,
             ),
-            itemCount: items.length,
+            itemCount: items.length + placeholderCount,
             itemBuilder: (context, index) {
+              if (index >= items.length) {
+                return AnimationCardSkeleton.standard(
+                  key: ValueKey('library-skeleton-${index - items.length}'),
+                );
+              }
+
               final entry = items[index];
               final flightKey = GlobalKey(
                 debugLabel: 'library-card-${entry.item.animationName}',
@@ -179,8 +186,8 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                   end: Alignment.bottomCenter,
                   colors: [
                     theme.scaffoldBackgroundColor,
-                    theme.scaffoldBackgroundColor.withOpacity(0.92),
-                    theme.scaffoldBackgroundColor.withOpacity(0),
+                    theme.scaffoldBackgroundColor.withValues(alpha: 0.92),
+                    theme.scaffoldBackgroundColor.withValues(alpha: 0),
                   ],
                 ),
               ),
@@ -271,13 +278,13 @@ class _CategoryPill extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected
-                ? Colors.white.withOpacity(0.88)
-                : Colors.black.withOpacity(0.34),
+                ? Colors.white.withValues(alpha: 0.88)
+                : Colors.black.withValues(alpha: 0.34),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: selected
-                  ? Colors.white.withOpacity(0.7)
-                  : Colors.white.withOpacity(0.14),
+                  ? Colors.white.withValues(alpha: 0.7)
+                  : Colors.white.withValues(alpha: 0.14),
             ),
           ),
           child: Text(

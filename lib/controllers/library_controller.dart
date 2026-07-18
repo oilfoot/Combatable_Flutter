@@ -47,6 +47,31 @@ class LibraryController extends ChangeNotifier {
       _remoteAddressablesService.categories;
 
   String? get selectedCategoryId => _selectedCategoryId;
+  bool get isLoadingMetadata =>
+      _remoteAddressablesService.isInitializing ||
+      (_selectedCategoryId != null &&
+          _remoteAddressablesService.loadingCategoryIds.contains(
+            _selectedCategoryId,
+          ));
+
+  int get metadataPlaceholderCount {
+    if (!isLoadingMetadata) return 0;
+
+    final categoryId = _selectedCategoryId;
+    if (categoryId != null && categoryId.isNotEmpty) {
+      final expected = _remoteAddressablesService
+          .expectedAnimationCountForCategory(categoryId);
+      final loaded = _remoteAddressablesService.loadedAnimationCountForCategory(
+        categoryId,
+      );
+      return (expected - loaded).clamp(0, 12);
+    }
+
+    final expected = _remoteAddressablesService.expectedAnimationCount;
+    final loaded = _remoteAddressablesService.availableItems.length;
+    if (expected == 0) return 6;
+    return (expected - loaded).clamp(0, 12);
+  }
 
   Future<void> selectCategory(String? categoryId) async {
     _selectedCategoryId = categoryId;

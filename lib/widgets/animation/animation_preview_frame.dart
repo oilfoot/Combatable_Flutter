@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+
+import '../../theme/app_theme.dart';
+import '../app_shimmer.dart';
 
 class AnimationPreviewFrame extends StatefulWidget {
   const AnimationPreviewFrame({
@@ -50,6 +54,7 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
     final previewPath = widget.previewPath;
 
     if (resolver == null || previewPath == null || previewPath.trim().isEmpty) {
+      _isLoading = false;
       return;
     }
 
@@ -65,13 +70,25 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
       return;
     }
 
-    _previewLoadTimer = Timer(const Duration(milliseconds: 450), () async {
+    _resolvedPreviewPath = null;
+    _isLoading = true;
+    _schedulePreviewLoad(const Duration(milliseconds: 100));
+  }
+
+  void _schedulePreviewLoad(Duration delay) {
+    _previewLoadTimer?.cancel();
+    _previewLoadTimer = Timer(delay, () async {
       if (!mounted) return;
 
-      setState(() {
-        _resolvedPreviewPath = null;
-        _isLoading = true;
-      });
+      if (!_isVisibleInScrollable() ||
+          Scrollable.recommendDeferredLoadingForContext(context)) {
+        _schedulePreviewLoad(const Duration(milliseconds: 140));
+        return;
+      }
+
+      final resolver = widget.resolvePreviewPath;
+      final previewPath = widget.previewPath;
+      if (resolver == null || previewPath == null) return;
 
       try {
         final resolved = await resolver(previewPath);
@@ -91,6 +108,24 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
         });
       }
     });
+  }
+
+  bool _isVisibleInScrollable() {
+    final scrollable = Scrollable.maybeOf(context);
+    if (scrollable == null) return true;
+
+    final renderObject = context.findRenderObject();
+    if (renderObject == null || !renderObject.attached) return false;
+
+    final viewport = RenderAbstractViewport.maybeOf(renderObject);
+    if (viewport == null) return true;
+
+    final position = scrollable.position;
+    final leading = viewport.getOffsetToReveal(renderObject, 0).offset;
+    final trailing = viewport.getOffsetToReveal(renderObject, 1).offset;
+    final visibleStart = position.pixels;
+    final visibleEnd = visibleStart + position.viewportDimension;
+    return trailing >= visibleStart && leading <= visibleEnd;
   }
 
   @override
@@ -181,18 +216,7 @@ class _AnimationPreviewFrameState extends State<AnimationPreviewFrame> {
   }
 
   Widget _buildLoadingPlaceholder(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: SizedBox(
-        width: 22,
-        height: 22,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
+    return const AppShimmer(child: ColoredBox(color: AppColors.textPrimary));
   }
 
   Widget _buildVideoPlaceholder(BuildContext context) {

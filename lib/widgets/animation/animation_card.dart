@@ -2,9 +2,107 @@ import 'package:flutter/material.dart';
 
 import '../../models/animation_library_item.dart';
 import '../../theme/app_theme.dart';
+import '../app_shimmer.dart';
 import 'animation_preview_frame.dart';
 
 enum AnimationCardVariant { standard, compact }
+
+class AnimationCardSkeleton extends StatelessWidget {
+  const AnimationCardSkeleton.standard({super.key, this.borderRadius})
+    : variant = AnimationCardVariant.standard;
+
+  const AnimationCardSkeleton.compact({super.key})
+    : variant = AnimationCardVariant.compact,
+      borderRadius = null;
+
+  final AnimationCardVariant variant;
+  final double? borderRadius;
+
+  bool get _isCompact => variant == AnimationCardVariant.compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius =
+        borderRadius ?? (_isCompact ? AppRadii.card : AppRadii.dialog);
+
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: AppShimmer(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: AppColors.surface),
+                if (_isCompact) ...[
+                  const Positioned(
+                    left: 10,
+                    right: 28,
+                    bottom: 24,
+                    height: 9,
+                    child: _SkeletonBar(),
+                  ),
+                  const Positioned(
+                    left: 10,
+                    right: 46,
+                    bottom: 10,
+                    height: 9,
+                    child: _SkeletonBar(),
+                  ),
+                ] else ...[
+                  const Positioned(
+                    left: 14,
+                    right: 42,
+                    bottom: 76,
+                    height: 16,
+                    child: _SkeletonBar(),
+                  ),
+                  const Positioned(
+                    left: 14,
+                    right: 78,
+                    bottom: 54,
+                    height: 16,
+                    child: _SkeletonBar(),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 14,
+                    height: 38,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.textPrimary,
+                        borderRadius: BorderRadius.circular(AppRadii.pill),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkeletonBar extends StatelessWidget {
+  const _SkeletonBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.textPrimary,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+      ),
+    );
+  }
+}
 
 class AnimationCard extends StatelessWidget {
   static const double compactExtent = 112;

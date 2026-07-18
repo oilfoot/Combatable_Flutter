@@ -169,6 +169,7 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
               .clamp(0.0, 1.0);
     final isExpanded =
         widget.panelState == SequenceBuilderLibraryPanelState.expanded;
+    final placeholderCount = widget.libraryController.metadataPlaceholderCount;
     final expandedCardsOpacity = isExpanded
         ? expandedProgress
         : (expandedProgress / 0.6).clamp(0.0, 1.0);
@@ -280,15 +281,13 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                             ),
                           );
                         },
-                        child: widget.items.isEmpty
+                        child: widget.items.isEmpty && placeholderCount == 0
                             ? const _EmptyLibraryState(
                                 key: ValueKey('empty-library'),
                               )
                             : LayoutBuilder(
                                 key: ValueKey(
-                                  widget.items
-                                      .map((entry) => entry.item.animationName)
-                                      .join('|'),
+                                  '${widget.items.map((entry) => entry.item.animationName).join('|')}|skeletons:$placeholderCount',
                                 ),
                                 builder: (context, constraints) {
                                   final gridHeight = expandedProgress > 0
@@ -322,8 +321,18 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                                                   SequenceBuilderLibrary
                                                       .animationCardExtent,
                                             ),
-                                        itemCount: widget.items.length,
+                                        itemCount:
+                                            widget.items.length +
+                                            placeholderCount,
                                         itemBuilder: (context, index) {
+                                          if (index >= widget.items.length) {
+                                            return AnimationCardSkeleton.compact(
+                                              key: ValueKey(
+                                                'builder-skeleton-${index - widget.items.length}',
+                                              ),
+                                            );
+                                          }
+
                                           final entry = widget.items[index];
                                           final flightKey = GlobalKey(
                                             debugLabel:
