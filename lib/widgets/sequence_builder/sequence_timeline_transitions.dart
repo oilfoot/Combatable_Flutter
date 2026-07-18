@@ -87,7 +87,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     final predictedFinalMaximum = math.max(
       position.minScrollExtent,
       position.maxScrollExtent -
-          removedStepCount * _TimelineRail.positionToPositionExtent,
+          removedStepCount * SequenceBuilderLayout.railPositionToPositionExtent,
     );
     const deletionScrollSafetyMargin = 20.0;
     final targetOffset = math.max(
@@ -138,8 +138,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         _libraryPanelKey.currentContext?.findRenderObject() as RenderBox?;
 
     if (addStepBox == null || viewportBox == null || panelBox == null) {
-      return slotOffset /
-          _SequenceBuilderScreenState._incomingTimelineStepExtent;
+      return slotOffset / SequenceBuilderLayout.timelineStepExtent;
     }
 
     final addStepBottom =
@@ -155,7 +154,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         : viewportBottom - 12;
     final overflow = math.max(0.0, addStepBottom - visibleBottom);
 
-    return overflow / _SequenceBuilderScreenState._incomingTimelineStepExtent;
+    return overflow / SequenceBuilderLayout.timelineStepExtent;
   }
 
   void _requestTimelineScroll(
@@ -215,9 +214,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         .dy;
     final requiredBottom =
         addStepBottom +
-        (reserveNextSlot
-            ? _SequenceBuilderScreenState._incomingTimelineStepExtent
-            : 0);
+        (reserveNextSlot ? SequenceBuilderLayout.timelineStepExtent : 0);
     final viewportTop = viewportBox.localToGlobal(Offset.zero).dy;
     final viewportBottom = viewportBox
         .localToGlobal(Offset(0, viewportBox.size.height))
@@ -227,11 +224,12 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
     final occlusionBoundary = panelTop > visibleTop ? panelTop : viewportBottom;
     if (isPostRevealScroll &&
         requiredBottom <=
-            occlusionBoundary + _timelinePostRevealOverflowThreshold) {
+            occlusionBoundary +
+                SequenceBuilderLayout.postRevealOverflowThreshold) {
       return;
     }
     final bottomClearance = isPostRevealScroll
-        ? _timelinePostRevealBottomClearance
+        ? SequenceBuilderLayout.postRevealBottomClearance
         : 12.0;
     final visibleBottom = panelTop > visibleTop
         ? panelTop - bottomClearance
@@ -291,7 +289,7 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         ? landingHandle
         : _lastClaimedPlaceholderHandle ?? landingHandle;
     final slotOffset = needsProjectedLandingSlot
-        ? _SequenceBuilderScreenState._incomingTimelineStepExtent
+        ? SequenceBuilderLayout.timelineStepExtent
         : 0.0;
     final flightTarget = _projectLandingTarget(
       baseHandle: baseHandle,
@@ -330,7 +328,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
       _activeBulkRestores++;
       _updateTimelineState(() {
         _bulkRestoreReservedExtent =
-            insertedItems.length * _TimelineRail.positionToPositionExtent;
+            insertedItems.length *
+            SequenceBuilderLayout.railPositionToPositionExtent;
       });
       await WidgetsBinding.instance.endOfFrame;
     }
@@ -469,7 +468,8 @@ extension _SequenceTimelineTransitions on _SequenceBuilderScreenState {
         _bulkRestoreReservedExtent = math.max(
           0,
           _bulkRestoreReservedExtent -
-              committedStepCount * _TimelineRail.positionToPositionExtent,
+              committedStepCount *
+                  SequenceBuilderLayout.railPositionToPositionExtent,
         );
       }
     });

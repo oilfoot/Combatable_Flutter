@@ -9,6 +9,7 @@ import '../controllers/sequence_controller.dart';
 import '../controllers/sequence_history_controller.dart';
 import '../models/animation_library_item.dart';
 import '../theme/app_theme.dart';
+import '../theme/sequence_builder_layout.dart';
 import '../widgets/app_confirmation_dialog.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card_flight.dart';
@@ -20,9 +21,6 @@ part '../widgets/sequence_builder/sequence_timeline_transitions.dart';
 part '../widgets/sequence_builder/sequence_builder_chrome.dart';
 
 const _timelinePlaceholderRevealDelay = Duration(milliseconds: 324);
-const double _timelinePostRevealBottomClearance = 32;
-const double _timelinePostRevealOverflowThreshold = 4;
-const double _sequenceControlsHeaderExtent = 196;
 
 enum _QueuedHistoryAction { undo, redo }
 
@@ -122,11 +120,6 @@ class _TimelineRemovalTransition {
 
 class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
   static const _previewPopHapticDelay = Duration(milliseconds: 90);
-
-  /// A completed step adds a 96 px tile, two 6 px gaps and a 28 px
-  /// position node. Reserve it before insertion so one scroll reveals both
-  /// the landing tile and the next placeholder.
-  static const double _incomingTimelineStepExtent = 136;
 
   late final TextEditingController _sequenceNameController;
   final ScrollController _timelineScrollController = ScrollController();
@@ -266,7 +259,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     if (pixels <= 1) {
       nextTop = 0;
       nextFloating = false;
-    } else if (!nextFloating && pixels < _sequenceControlsHeaderExtent) {
+    } else if (!nextFloating && pixels < SequenceBuilderLayout.headerExtent) {
       nextTop = -pixels;
     } else {
       final directUpwardDrag =
@@ -277,14 +270,14 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
 
       if (nextFloating) {
         nextTop = (nextTop - scrollDelta).clamp(
-          -_sequenceControlsHeaderExtent,
+          -SequenceBuilderLayout.headerExtent,
           0.0,
         );
-        if (nextTop <= -_sequenceControlsHeaderExtent && scrollDelta > 0) {
+        if (nextTop <= -SequenceBuilderLayout.headerExtent && scrollDelta > 0) {
           nextFloating = false;
         }
       } else {
-        nextTop = -_sequenceControlsHeaderExtent;
+        nextTop = -SequenceBuilderLayout.headerExtent;
       }
     }
 
@@ -597,11 +590,11 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
         _libraryPanelState == SequenceBuilderLibraryPanelState.fullyCollapsed
         ? SequenceBuilderLibrary.fullyCollapsedHeight +
               16 +
-              _incomingTimelineStepExtent +
+              SequenceBuilderLayout.timelineStepExtent +
               _bulkRestoreReservedExtent
         : SequenceBuilderLibrary.collapsedHeight +
               16 +
-              _incomingTimelineStepExtent +
+              SequenceBuilderLayout.timelineStepExtent +
               _bulkRestoreReservedExtent;
 
     return Scaffold(
@@ -624,7 +617,9 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
                     padding: EdgeInsets.only(bottom: timelineBottomPadding),
                     child: Column(
                       children: [
-                        const SizedBox(height: _sequenceControlsHeaderExtent),
+                        const SizedBox(
+                          height: SequenceBuilderLayout.headerExtent,
+                        ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                           child: _TimelineSection(
@@ -655,7 +650,7 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
               top: _controlsHeaderTop,
               left: 0,
               right: 0,
-              height: _sequenceControlsHeaderExtent,
+              height: SequenceBuilderLayout.headerExtent,
               child: ColoredBox(
                 color: AppColors.background,
                 child: _SequenceHeader(

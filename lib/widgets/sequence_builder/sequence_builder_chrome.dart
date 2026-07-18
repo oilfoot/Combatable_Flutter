@@ -20,7 +20,7 @@ class _TimelineActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: SequenceBuilderLayout.minimumControlTarget,
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadii.small),
@@ -77,7 +77,10 @@ class _HistoryIconButton extends StatelessWidget {
       color: AppColors.accentSoft,
       disabledColor: AppColors.textDisabled,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 44, height: 42),
+      constraints: const BoxConstraints.tightFor(
+        width: SequenceBuilderLayout.minimumControlTarget,
+        height: SequenceBuilderLayout.minimumControlTarget,
+      ),
       splashRadius: 21,
     );
   }
@@ -141,35 +144,33 @@ class _SequenceHeader extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            height: 44,
-            child: Stack(
-              alignment: Alignment.center,
+            height: SequenceBuilderLayout.minimumControlTarget,
+            child: Row(
               children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
+                const Expanded(
                   child: Text(
                     'Sequence Builder',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppTypography.screenTitle,
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    tooltip: 'Name and save sequence',
-                    onPressed: () => _openSequenceDetails(context),
-                    icon: const Icon(Icons.bookmark_add_outlined, size: 20),
-                    color: AppColors.accentSoft,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 44,
-                      height: 44,
-                    ),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppColors.surface,
-                      side: const BorderSide(color: AppColors.borderSubtle),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadii.medium),
-                      ),
+                const SizedBox(width: AppSpacing.md),
+                IconButton(
+                  tooltip: 'Name and save sequence',
+                  onPressed: () => _openSequenceDetails(context),
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 20),
+                  color: AppColors.accentSoft,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: SequenceBuilderLayout.minimumControlTarget,
+                    height: SequenceBuilderLayout.minimumControlTarget,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.surface,
+                    side: const BorderSide(color: AppColors.borderSubtle),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadii.medium),
                     ),
                   ),
                 ),
@@ -179,7 +180,7 @@ class _SequenceHeader extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           SizedBox(
             width: double.infinity,
-            height: 52,
+            height: SequenceBuilderLayout.primaryActionHeight,
             child: ElevatedButton.icon(
               onPressed: onBuildUnitySequence,
               icon: const Icon(Icons.play_circle_outline),
@@ -195,7 +196,7 @@ class _SequenceHeader extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xxl),
           SizedBox(
-            height: 44,
+            height: SequenceBuilderLayout.minimumControlTarget,
             child: Row(
               children: [
                 const Expanded(

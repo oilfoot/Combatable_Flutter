@@ -47,12 +47,12 @@ class _TimelineSectionState extends State<_TimelineSection> {
         _TimelineRailSegmentData(
           id: 'connection-${step.id}',
           top: top,
-          extent: _TimelineRail.positionToPositionExtent,
+          extent: SequenceBuilderLayout.railPositionToPositionExtent,
           animateOnMount: step.animateOnMount,
           delay: step.animateOnMount ? _timelineRailStepDelay : Duration.zero,
         ),
       );
-      top += _TimelineRail.positionToPositionExtent;
+      top += SequenceBuilderLayout.railPositionToPositionExtent;
     }
 
     final pendingReservations = widget.pendingReservations;
@@ -65,12 +65,12 @@ class _TimelineSectionState extends State<_TimelineSection> {
         _TimelineRailSegmentData(
           id: 'connection-${pendingReservations[index].handle.id}',
           top: top,
-          extent: _TimelineRail.positionToPositionExtent,
+          extent: SequenceBuilderLayout.railPositionToPositionExtent,
           animateOnMount: true,
           delay: Duration.zero,
         ),
       );
-      top += _TimelineRail.positionToPositionExtent;
+      top += SequenceBuilderLayout.railPositionToPositionExtent;
     }
 
     if (removalTransition?.isRemovingContent == true) {
@@ -78,7 +78,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
         _TimelineRailSegmentData(
           id: 'connection-${removalTransition!.replacementPlaceholderHandle.id}',
           top: top,
-          extent: _TimelineRail.positionToPlaceholderExtent,
+          extent: SequenceBuilderLayout.railPositionToPlaceholderExtent,
           animateOnMount: false,
           delay: Duration.zero,
         ),
@@ -93,7 +93,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
       _TimelineRailSegmentData(
         id: 'connection-${terminalHandle.id}',
         top: top,
-        extent: _TimelineRail.positionToPlaceholderExtent,
+        extent: SequenceBuilderLayout.railPositionToPlaceholderExtent,
         animateOnMount: terminalHandle.animateOnMount,
         delay: pendingReservations.isNotEmpty
             ? Duration.zero
@@ -120,15 +120,15 @@ class _TimelineSectionState extends State<_TimelineSection> {
     return Stack(
       children: [
         Positioned(
-          left: 13.5,
-          top: 14,
+          left: SequenceBuilderLayout.railLeft,
+          top: SequenceBuilderLayout.railTop,
           child: _TimelineRail(segments: _buildRailSegments()),
         ),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _TimelinePositionNode(value: firstPosition),
-            const SizedBox(height: 6),
+            const SizedBox(height: SequenceBuilderLayout.timelineEntryGap),
             for (var index = 0; index < widget.steps.length; index++)
               _AnimatedTimelineStepEntry(
                 key: ValueKey('timeline-step-${widget.steps[index].id}'),
@@ -166,14 +166,14 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 onTap: widget.onAddStep,
               ),
               if (index < pendingReservations.length - 1) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: SequenceBuilderLayout.timelineEntryGap),
                 _RevealingTimelinePositionNode(
                   key: ValueKey(
                     'pending-position-${pendingReservations[index + 1].handle.id}',
                   ),
                   value: pendingReservations[index].item.endPosition,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: SequenceBuilderLayout.timelineEntryGap),
               ],
             ],
             if (pendingReservations.isEmpty)
@@ -223,9 +223,6 @@ class _DisplayedTimelineRailSegment {
 
 class _TimelineRail extends StatefulWidget {
   const _TimelineRail({required this.segments});
-
-  static const double positionToPositionExtent = 136;
-  static const double positionToPlaceholderExtent = 68;
 
   final List<_TimelineRailSegmentData> segments;
 
@@ -295,7 +292,7 @@ class _TimelineRailState extends State<_TimelineRail> {
     );
 
     return SizedBox(
-      width: 1,
+      width: SequenceBuilderLayout.railWidth,
       height: railHeight,
       child: Stack(
         clipBehavior: Clip.none,
@@ -438,12 +435,12 @@ class _AnimatedTimelineRailSegmentState
         final progress = Curves.easeInOutCubic.transform(_controller.value);
         final animatedExtent = _extentAnimation.value;
         return SizedBox(
-          width: 1,
+          width: SequenceBuilderLayout.railWidth,
           height: math.max(widget.data.extent, animatedExtent),
           child: Align(
             alignment: Alignment.topCenter,
             child: Container(
-              width: 1,
+              width: SequenceBuilderLayout.railWidth,
               height: animatedExtent * progress,
               color: AppColors.borderStrong,
             ),
@@ -801,7 +798,7 @@ class _AddTimelineStep extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: SizedBox(
                     width: fullWidth * revealProgress,
-                    height: 96,
+                    height: SequenceBuilderLayout.timelineTileHeight,
                     child: Material(
                       color: AppColors.surface,
                       shape: RoundedRectangleBorder(
@@ -823,8 +820,10 @@ class _AddTimelineStep extends StatelessWidget {
                               children: [
                                 Container(
                                   key: flightTargetKey,
-                                  width: 72,
-                                  height: 72,
+                                  width:
+                                      SequenceBuilderLayout.timelinePreviewSize,
+                                  height:
+                                      SequenceBuilderLayout.timelinePreviewSize,
                                   decoration: BoxDecoration(
                                     color: AppColors.accent.withValues(
                                       alpha: AppOpacity.subtle,
@@ -939,7 +938,7 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
     );
 
     return SizedBox(
-      height: 96,
+      height: SequenceBuilderLayout.timelineTileHeight,
       child: Row(
         children: [
           _StepNumber(index: index, isPending: showsPlaceholderPreview),
@@ -968,8 +967,8 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
                             scale: plusScale,
                             child: Container(
                               key: placeholderHandle.flightTargetKey,
-                              width: 72,
-                              height: 72,
+                              width: SequenceBuilderLayout.timelinePreviewSize,
+                              height: SequenceBuilderLayout.timelinePreviewSize,
                               decoration: BoxDecoration(
                                 color: AppColors.accent.withValues(
                                   alpha: AppOpacity.subtle,
@@ -1001,8 +1000,10 @@ class _DeletingTimelineTileToPlaceholder extends StatelessWidget {
                                 AppRadii.small,
                               ),
                               child: SizedBox(
-                                width: 72,
-                                height: 72,
+                                width:
+                                    SequenceBuilderLayout.timelinePreviewSize,
+                                height:
+                                    SequenceBuilderLayout.timelinePreviewSize,
                                 child: AnimationPreviewFrame(
                                   previewPath: item.previewPath,
                                   resolvePreviewPath: resolvePreviewPath,
@@ -1189,8 +1190,8 @@ class _TimelineAnimationTile extends StatelessWidget {
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(AppRadii.small),
                           child: SizedBox(
-                            width: 72,
-                            height: 72,
+                            width: SequenceBuilderLayout.timelinePreviewSize,
+                            height: SequenceBuilderLayout.timelinePreviewSize,
                             child: AnimationPreviewFrame(
                               previewPath: item.previewPath,
                               resolvePreviewPath: resolvePreviewPath,
@@ -1267,8 +1268,8 @@ class _StepNumber extends StatelessWidget {
         : AppColors.textSecondary;
 
     return Container(
-      width: 28,
-      height: 28,
+      width: SequenceBuilderLayout.timelinePositionNodeSize,
+      height: SequenceBuilderLayout.timelinePositionNodeSize,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
@@ -1320,11 +1321,11 @@ class _TimelinePositionNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 28,
+      height: SequenceBuilderLayout.timelinePositionNodeSize,
       child: Row(
         children: [
           SizedBox(
-            width: 28,
+            width: SequenceBuilderLayout.timelinePositionNodeSize,
             child: Center(
               child: Container(
                 width: 7,
