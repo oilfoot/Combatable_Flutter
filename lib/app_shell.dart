@@ -7,6 +7,7 @@ import 'controllers/bookmark_controller.dart';
 import 'controllers/sequence_controller.dart';
 import 'controllers/sequence_history_controller.dart';
 import 'controllers/saved_sequence_controller.dart';
+import 'models/saved_sequence.dart';
 import 'screens/full_library_screen.dart';
 import 'widgets/floating_nav_bar.dart';
 import 'screens/home_screen.dart';
@@ -96,6 +97,8 @@ class _AppShellState extends State<AppShell> {
       ProfileScreen(
         libraryController: _libraryController,
         savedSequenceController: _savedSequenceController,
+        onBuildSequence: _buildSavedSequence,
+        onEditSequence: _editSavedSequence,
       ),
     ];
   }
@@ -137,6 +140,25 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _currentIndex = 2;
     });
+  }
+
+  Future<void> _buildSavedSequence(SavedSequence sequence) async {
+    await _remoteAddressablesService.ensureUnityPrepared();
+    await widget.unityService.preparePreview(
+      sequenceName: sequence.name,
+      animations: [
+        for (final animation in sequence.animations) animation.animationName,
+      ],
+    );
+
+    if (!mounted) return;
+    setState(() => _currentIndex = 2);
+  }
+
+  void _editSavedSequence(SavedSequence sequence) {
+    widget.sequenceController.setSequenceName(sequence.name);
+    _sequenceHistoryController.replaceAll(sequence.animations);
+    setState(() => _currentIndex = 3);
   }
 
   Future<void> _openUnityPreview() async {

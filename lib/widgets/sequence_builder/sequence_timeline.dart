@@ -16,6 +16,7 @@ class _TimelineSection extends StatefulWidget {
     required this.onAddStep,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
+    this.readOnly = false,
   });
 
   final List<_TimelineVisualStep> steps;
@@ -28,6 +29,7 @@ class _TimelineSection extends StatefulWidget {
   final VoidCallback onAddStep;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
+  final bool readOnly;
 
   @override
   State<_TimelineSection> createState() => _TimelineSectionState();
@@ -54,6 +56,8 @@ class _TimelineSectionState extends State<_TimelineSection> {
       );
       top += SequenceBuilderLayout.railPositionToPositionExtent;
     }
+
+    if (widget.readOnly) return segments;
 
     final pendingReservations = widget.pendingReservations;
     for (
@@ -142,41 +146,51 @@ class _TimelineSectionState extends State<_TimelineSection> {
                     index == widget.removalTransition!.firstRemovedIndex,
                 replacementPlaceholderHandle:
                     widget.removalTransition?.replacementPlaceholderHandle,
-                onRemove: () => widget.onRemoveAt(index),
-                onTap: () => widget.onItemTap(widget.steps[index].item),
+                onRemove: widget.readOnly
+                    ? null
+                    : () => widget.onRemoveAt(index),
+                onTap: widget.readOnly
+                    ? null
+                    : () => widget.onItemTap(widget.steps[index].item),
                 resolvePreviewPath: widget.resolvePreviewPath,
                 resolveCachedPreviewPath: widget.resolveCachedPreviewPath,
               ),
-            for (
-              var index = 0;
-              index < pendingReservations.length;
-              index++
-            ) ...[
-              _RevealingAddTimelineStep(
-                key: ValueKey(
-                  'placeholder-${pendingReservations[index].handle.id}',
-                ),
-                handle: pendingReservations[index].handle,
-                index: widget.steps.length + index,
-                requiredPosition: pendingReservations[index].item.startPosition,
-                isFirstStep: widget.steps.isEmpty && index == 0,
-                revealDelay: Duration.zero,
-                isRemoving: false,
-                removalCompletion: null,
-                onTap: widget.onAddStep,
-              ),
-              if (index < pendingReservations.length - 1) ...[
-                const SizedBox(height: SequenceBuilderLayout.timelineEntryGap),
-                _RevealingTimelinePositionNode(
+            if (!widget.readOnly)
+              for (
+                var index = 0;
+                index < pendingReservations.length;
+                index++
+              ) ...[
+                _RevealingAddTimelineStep(
                   key: ValueKey(
-                    'pending-position-${pendingReservations[index + 1].handle.id}',
+                    'placeholder-${pendingReservations[index].handle.id}',
                   ),
-                  value: pendingReservations[index].item.endPosition,
+                  handle: pendingReservations[index].handle,
+                  index: widget.steps.length + index,
+                  requiredPosition:
+                      pendingReservations[index].item.startPosition,
+                  isFirstStep: widget.steps.isEmpty && index == 0,
+                  revealDelay: Duration.zero,
+                  isRemoving: false,
+                  removalCompletion: null,
+                  onTap: widget.onAddStep,
                 ),
-                const SizedBox(height: SequenceBuilderLayout.timelineEntryGap),
+                if (index < pendingReservations.length - 1) ...[
+                  const SizedBox(
+                    height: SequenceBuilderLayout.timelineEntryGap,
+                  ),
+                  _RevealingTimelinePositionNode(
+                    key: ValueKey(
+                      'pending-position-${pendingReservations[index + 1].handle.id}',
+                    ),
+                    value: pendingReservations[index].item.endPosition,
+                  ),
+                  const SizedBox(
+                    height: SequenceBuilderLayout.timelineEntryGap,
+                  ),
+                ],
               ],
-            ],
-            if (pendingReservations.isEmpty)
+            if (!widget.readOnly && pendingReservations.isEmpty)
               _RevealingAddTimelineStep(
                 key: ValueKey('placeholder-${widget.openPlaceholderHandle.id}'),
                 handle: widget.openPlaceholderHandle,
@@ -495,8 +509,8 @@ class _AnimatedTimelineStepEntry extends StatefulWidget {
   final bool isRemoving;
   final bool morphsToPlaceholder;
   final _TimelinePlaceholderHandle? replacementPlaceholderHandle;
-  final VoidCallback onRemove;
-  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  final VoidCallback? onTap;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
@@ -1144,8 +1158,8 @@ class _TimelineAnimationTile extends StatelessWidget {
   final int index;
   final AnimationLibraryItem item;
   final double insertionProgress;
-  final VoidCallback onRemove;
-  final VoidCallback onTap;
+  final VoidCallback? onRemove;
+  final VoidCallback? onTap;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
 
@@ -1236,13 +1250,14 @@ class _TimelineAnimationTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Opacity(
-                      opacity: textProgress,
-                      child: IconButton(
-                        onPressed: onRemove,
-                        icon: const Icon(Icons.close_rounded),
+                    if (onRemove != null)
+                      Opacity(
+                        opacity: textProgress,
+                        child: IconButton(
+                          onPressed: onRemove,
+                          icon: const Icon(Icons.close_rounded),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),

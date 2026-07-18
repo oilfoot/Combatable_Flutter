@@ -44,6 +44,53 @@ class SequenceBuilderScreen extends StatefulWidget {
   State<SequenceBuilderScreen> createState() => _SequenceBuilderScreenState();
 }
 
+/// Presents the builder's timeline without its editing controls or add-step
+/// placeholder. Both screens therefore share the same rail, nodes, and tiles.
+class SequenceTimelineViewer extends StatelessWidget {
+  const SequenceTimelineViewer({
+    super.key,
+    required this.animations,
+    required this.resolvePreviewPath,
+    required this.resolveCachedPreviewPath,
+  });
+
+  final List<AnimationLibraryItem> animations;
+  final Future<String?> Function(String? previewPath) resolvePreviewPath;
+  final String? Function(String? previewPath) resolveCachedPreviewPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = [
+      for (var index = 0; index < animations.length; index++)
+        _TimelineVisualStep(
+          id: index,
+          item: animations[index],
+          animateOnMount: false,
+          animatePositionOnMount: false,
+        ),
+    ];
+
+    return _TimelineSection(
+      steps: steps,
+      pendingReservations: const [],
+      openPlaceholderHandle: _TimelinePlaceholderHandle(
+        id: -1,
+        animateOnMount: false,
+      ),
+      removalTransition: null,
+      requiredNextPosition: animations.isEmpty
+          ? 'Any'
+          : animations.last.endPosition,
+      onRemoveAt: (_) {},
+      onItemTap: (_) {},
+      onAddStep: () {},
+      resolvePreviewPath: resolvePreviewPath,
+      resolveCachedPreviewPath: resolveCachedPreviewPath,
+      readOnly: true,
+    );
+  }
+}
+
 class _TimelineVisualStep {
   const _TimelineVisualStep({
     required this.id,

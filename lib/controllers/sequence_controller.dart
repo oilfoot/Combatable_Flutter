@@ -21,7 +21,7 @@ class SequenceController extends ChangeNotifier {
   final UnityService unityService;
   StreamSubscription<String>? _logSub;
 
-  String _sequenceName = 'New Sequence';
+  String _sequenceName = 'My Sequence';
   final List<AnimationLibraryItem> _selectedAnimations =
       <AnimationLibraryItem>[];
   final List<String> _logs = <String>[];
@@ -36,7 +36,7 @@ class SequenceController extends ChangeNotifier {
 
   void setSequenceName(String value) {
     final trimmed = value.trim();
-    _sequenceName = trimmed.isEmpty ? 'New Sequence' : trimmed;
+    _sequenceName = trimmed.isEmpty ? 'My Sequence' : trimmed;
     notifyListeners();
   }
 

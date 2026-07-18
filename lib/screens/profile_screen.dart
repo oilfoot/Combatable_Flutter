@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../controllers/saved_sequence_controller.dart';
+import '../models/saved_sequence.dart';
 import '../theme/app_theme.dart';
 import '../theme/profile_layout.dart';
 import '../widgets/animation/animation_info_sheet.dart';
@@ -12,16 +13,21 @@ import '../widgets/profile/profile_collection_tabs.dart';
 import '../widgets/profile/profile_favorites_grid.dart';
 import '../widgets/profile/profile_header.dart';
 import '../widgets/profile/profile_sequence_list.dart';
+import 'saved_sequence_detail_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     required this.libraryController,
     required this.savedSequenceController,
+    required this.onBuildSequence,
+    required this.onEditSequence,
   });
 
   final LibraryController libraryController;
   final SavedSequenceController savedSequenceController;
+  final Future<void> Function(SavedSequence sequence) onBuildSequence;
+  final ValueChanged<SavedSequence> onEditSequence;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -102,6 +108,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await widget.libraryController.toggleBookmark(entry.item);
   }
 
+  void _openSavedSequenceDetails(SavedSequence sequence) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SavedSequenceDetailScreen(
+          sequence: sequence,
+          resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
+          resolveCachedPreviewPath:
+              widget.libraryController.getCachedPreviewPath,
+          onBuildSequence: widget.onBuildSequence,
+          onEditSequence: widget.onEditSequence,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -157,8 +178,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : ProfileSequenceList(
                           key: const ValueKey(ProfileCollection.sequences),
                           entries: widget.savedSequenceController.sequences,
-                          onSequencePressed: (entry) =>
-                              _showPlaceholder(entry.name),
+                          onSequencePressed: _openSavedSequenceDetails,
                         ),
                 ),
               ),

@@ -40,8 +40,7 @@ class _SavedSequenceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stepLabel = '${entry.stepCount} animation steps';
-    final updatedLabel = _formatUpdatedLabel(entry.updatedAt);
+    final stepLabel = '${entry.stepCount} steps';
 
     return Semantics(
       button: true,
@@ -80,38 +79,15 @@ class _SavedSequenceRow extends StatelessWidget {
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.sm),
-                          Text(
-                            stepLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
                           const SizedBox(height: AppSpacing.xs),
                           Row(
                             children: [
-                              Flexible(
-                                child: Text(
-                                  '${entry.startPosition}  →  ${entry.endPosition}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.accentSoft,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
+                              _StepCountBadge(count: entry.stepCount),
                               const SizedBox(width: AppSpacing.sm),
-                              Flexible(
-                                child: Text(
-                                  updatedLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption.copyWith(
-                                    color: AppColors.textDisabled,
-                                  ),
+                              Expanded(
+                                child: _PositionRange(
+                                  startPosition: entry.startPosition,
+                                  endPosition: entry.endPosition,
                                 ),
                               ),
                             ],
@@ -135,25 +111,6 @@ class _SavedSequenceRow extends StatelessWidget {
   }
 }
 
-String _formatUpdatedLabel(DateTime value) {
-  final now = DateTime.now();
-  final difference = now.difference(value);
-
-  if (difference.inMinutes < 1) return 'Saved just now';
-  if (difference.inHours < 1) {
-    return 'Saved ${difference.inMinutes}m ago';
-  }
-  if (difference.inDays < 1) {
-    return 'Saved ${difference.inHours}h ago';
-  }
-  if (difference.inDays == 1) return 'Saved yesterday';
-  if (difference.inDays < 7) return 'Saved ${difference.inDays}d ago';
-
-  final day = value.day.toString().padLeft(2, '0');
-  final month = value.month.toString().padLeft(2, '0');
-  return 'Saved $day.$month.${value.year}';
-}
-
 class _SequenceCoverPlaceholder extends StatelessWidget {
   const _SequenceCoverPlaceholder();
 
@@ -162,6 +119,7 @@ class _SequenceCoverPlaceholder extends StatelessWidget {
     return Container(
       width: ProfileLayout.sequencePreviewSize,
       height: ProfileLayout.sequencePreviewSize,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: AppColors.accent.withValues(alpha: AppOpacity.subtle),
         borderRadius: BorderRadius.circular(AppRadii.medium),
@@ -169,11 +127,90 @@ class _SequenceCoverPlaceholder extends StatelessWidget {
           color: AppColors.accentSoft.withValues(alpha: AppOpacity.muted),
         ),
       ),
-      alignment: Alignment.center,
       child: const Icon(
         Icons.account_tree_outlined,
         size: 30,
         color: AppColors.accentSoft,
+      ),
+    );
+  }
+}
+
+class _StepCountBadge extends StatelessWidget {
+  const _StepCountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: AppOpacity.subtle),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(
+          color: AppColors.accentSoft.withValues(alpha: AppOpacity.muted),
+        ),
+      ),
+      child: Text(
+        '$count steps',
+        style: AppTypography.caption.copyWith(
+          color: AppColors.accentSoft,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _PositionRange extends StatelessWidget {
+  const _PositionRange({
+    required this.startPosition,
+    required this.endPosition,
+  });
+
+  final String startPosition;
+  final String endPosition;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _PositionLine(label: 'Start', value: startPosition),
+        const SizedBox(height: AppSpacing.xs),
+        _PositionLine(label: 'End', value: endPosition),
+      ],
+    );
+  }
+}
+
+class _PositionLine extends StatelessWidget {
+  const _PositionLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      TextSpan(
+        style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+        children: [
+          TextSpan(text: '$label  '),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: AppColors.accentSoft,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

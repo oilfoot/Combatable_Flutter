@@ -96,6 +96,15 @@ class SequenceHistoryController extends ChangeNotifier {
     return true;
   }
 
+  bool replaceAll(List<AnimationLibraryItem> animations) {
+    final before = _snapshot();
+    if (listEquals(before, animations)) return false;
+
+    _sequenceController.replaceAnimations(animations);
+    _commitUserMutation(before);
+    return true;
+  }
+
   void undo() {
     if (!canUndo) return;
 
