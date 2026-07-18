@@ -199,6 +199,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   duration: AppMotion.quick,
                   switchInCurve: AppMotion.enter,
                   switchOutCurve: AppMotion.exit,
+                  layoutBuilder: (currentChild, previousChildren) {
+                    return Stack(
+                      alignment: Alignment.topCenter,
+                      children: [...previousChildren, ?currentChild],
+                    );
+                  },
                   child: _selectedCollection == ProfileCollection.favorites
                       ? ProfileFavoritesGrid(
                           key: ValueKey(ProfileCollection.favorites),

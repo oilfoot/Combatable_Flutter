@@ -92,6 +92,18 @@ class SavedSequenceController extends ChangeNotifier {
     return updated;
   }
 
+  Future<bool> delete(String id) async {
+    await initialize();
+
+    final index = _sequences.indexWhere((sequence) => sequence.id == id);
+    if (index < 0) return false;
+
+    _sequences.removeAt(index);
+    notifyListeners();
+    await _enqueueWrite();
+    return true;
+  }
+
   Future<void> _load() async {
     final directory = await getApplicationSupportDirectory();
     final file = File('${directory.path}/saved_sequences.json');

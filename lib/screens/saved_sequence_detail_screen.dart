@@ -304,6 +304,35 @@ class _SavedSequenceDetailScreenState extends State<SavedSequenceDetailScreen> {
     }
   }
 
+  Future<void> _deleteSequence() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: AppColors.black.withValues(alpha: AppOpacity.barrier),
+      builder: (_) => AppConfirmationDialog(
+        title: 'Delete sequence?',
+        message: 'Remove “${_savedSequence.name}” from My Sequences?',
+        confirmLabel: 'Delete',
+        icon: Icons.delete_outline_rounded,
+        isDestructive: true,
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final deleted = await widget.savedSequenceController.delete(
+      _savedSequence.id,
+    );
+    if (!mounted) return;
+
+    if (!deleted) {
+      _showError('The sequence could not be deleted.');
+      return;
+    }
+
+    await HapticFeedback.mediumImpact();
+    if (mounted) Navigator.of(context).pop();
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -361,6 +390,7 @@ class _SavedSequenceDetailScreenState extends State<SavedSequenceDetailScreen> {
                           _DetailTopBar(
                             isEditing: _isEditing,
                             onBack: _handleBack,
+                            onDelete: _isEditing ? null : _deleteSequence,
                           ),
                           const SizedBox(height: AppSpacing.panel),
                           _SequenceNameField(
@@ -500,10 +530,15 @@ class _SavedSequenceDetailScreenState extends State<SavedSequenceDetailScreen> {
 }
 
 class _DetailTopBar extends StatelessWidget {
-  const _DetailTopBar({required this.isEditing, required this.onBack});
+  const _DetailTopBar({
+    required this.isEditing,
+    required this.onBack,
+    required this.onDelete,
+  });
 
   final bool isEditing;
   final VoidCallback onBack;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -527,6 +562,24 @@ class _DetailTopBar extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
+        const Spacer(),
+        if (onDelete != null)
+          IconButton.filled(
+            tooltip: 'Delete sequence',
+            onPressed: onDelete,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.destructive.withValues(
+                alpha: AppOpacity.subtle,
+              ),
+              foregroundColor: AppColors.destructiveSoft,
+              side: BorderSide(
+                color: AppColors.destructive.withValues(
+                  alpha: AppOpacity.muted,
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.delete_outline_rounded),
+          ),
       ],
     );
   }
