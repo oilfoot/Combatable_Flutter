@@ -10,7 +10,6 @@ import '../controllers/sequence_history_controller.dart';
 import '../models/animation_library_item.dart';
 import '../theme/app_theme.dart';
 import '../theme/sequence_builder_layout.dart';
-import '../widgets/app_confirmation_dialog.dart';
 import '../widgets/animation/animation_info_sheet.dart';
 import '../widgets/animation/animation_card_flight.dart';
 import '../widgets/animation/animation_preview_frame.dart';
@@ -446,62 +445,19 @@ class _SequenceBuilderScreenState extends State<SequenceBuilderScreen> {
     unawaited(HapticFeedback.mediumImpact());
   }
 
-  Future<bool> _confirmDeletion({
-    required String title,
-    required String message,
-    required String confirmLabel,
-    required IconData icon,
-  }) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierColor: AppColors.black.withValues(alpha: AppOpacity.barrier),
-      builder: (_) => AppConfirmationDialog(
-        title: title,
-        message: message,
-        confirmLabel: confirmLabel,
-        icon: icon,
-        isDestructive: true,
-      ),
-    );
-    return confirmed ?? false;
-  }
-
-  Future<void> _removeTimelineAnimationAt(int index) async {
+  void _removeTimelineAnimationAt(int index) {
     if (_activeVisualRemovals > 0 ||
         index < 0 ||
         index >= _visualTimelineSteps.length) {
       return;
     }
 
-    final lastStep = _visualTimelineSteps.length;
-    final removedCount = lastStep - index;
-    if (removedCount > 1) {
-      final confirmed = await _confirmDeletion(
-        title: 'Delete steps ${index + 1}–$lastStep?',
-        message:
-            'Following steps must also be removed so the poses still match.',
-        confirmLabel: 'Delete',
-        icon: Icons.delete_outline_rounded,
-      );
-      if (!confirmed || !mounted) return;
-    }
-
     widget.sequenceHistoryController.removeFrom(index);
   }
 
-  Future<void> _clearAllTimelineAnimations() async {
+  void _clearAllTimelineAnimations() {
     if (_activeVisualRemovals > 0) return;
-    final stepCount = widget.sequenceController.selectedAnimations.length;
-    if (stepCount == 0) return;
-
-    final confirmed = await _confirmDeletion(
-      title: 'Reset sequence?',
-      message:
-          'All $stepCount animation ${stepCount == 1 ? 'step' : 'steps'} will be removed.',
-      confirmLabel: 'Reset',
-      icon: Icons.refresh_rounded,
-    );
-    if (!confirmed || !mounted) return;
+    if (widget.sequenceController.selectedAnimations.isEmpty) return;
 
     widget.sequenceHistoryController.clear();
   }
