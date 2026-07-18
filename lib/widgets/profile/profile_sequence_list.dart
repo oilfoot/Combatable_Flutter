@@ -9,10 +9,14 @@ class ProfileSequenceList extends StatelessWidget {
     super.key,
     required this.entries,
     required this.onSequencePressed,
+    required this.onBuildPressed,
+    required this.buildingSequenceId,
   });
 
   final List<SavedSequence> entries;
   final ValueChanged<SavedSequence> onSequencePressed;
+  final ValueChanged<SavedSequence> onBuildPressed;
+  final String? buildingSequenceId;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +30,8 @@ class ProfileSequenceList extends StatelessWidget {
         return _SavedSequenceRow(
           entry: entry,
           onTap: () => onSequencePressed(entry),
+          onBuild: () => onBuildPressed(entry),
+          isBuilding: buildingSequenceId == entry.id,
         );
       },
     );
@@ -33,10 +39,17 @@ class ProfileSequenceList extends StatelessWidget {
 }
 
 class _SavedSequenceRow extends StatelessWidget {
-  const _SavedSequenceRow({required this.entry, required this.onTap});
+  const _SavedSequenceRow({
+    required this.entry,
+    required this.onTap,
+    required this.onBuild,
+    required this.isBuilding,
+  });
 
   final SavedSequence entry;
   final VoidCallback onTap;
+  final VoidCallback onBuild;
+  final bool isBuilding;
 
   @override
   Widget build(BuildContext context) {
@@ -96,9 +109,29 @@ class _SavedSequenceRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: AppColors.textSecondary,
+                    IconButton(
+                      tooltip: 'Build sequence',
+                      onPressed: isBuilding ? null : onBuild,
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppColors.accent.withValues(
+                          alpha: AppOpacity.subtle,
+                        ),
+                        foregroundColor: AppColors.accentSoft,
+                        side: BorderSide(
+                          color: AppColors.accentSoft.withValues(
+                            alpha: AppOpacity.muted,
+                          ),
+                        ),
+                      ),
+                      icon: isBuilding
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.accentSoft,
+                              ),
+                            )
+                          : const Icon(Icons.play_arrow_rounded),
                     ),
                   ],
                 ),

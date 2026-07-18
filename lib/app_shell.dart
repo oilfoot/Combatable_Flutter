@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'controllers/library_controller.dart';
 import 'controllers/bookmark_controller.dart';
+import 'controllers/profile_preferences_controller.dart';
 import 'controllers/sequence_controller.dart';
 import 'controllers/sequence_history_controller.dart';
 import 'controllers/saved_sequence_controller.dart';
@@ -49,6 +50,7 @@ class _AppShellState extends State<AppShell> {
   late final LibraryController _libraryController;
   late final SequenceHistoryController _sequenceHistoryController;
   late final SavedSequenceController _savedSequenceController;
+  late final ProfilePreferencesController _profilePreferencesController;
   late final List<Widget> _pages;
 
   @override
@@ -64,6 +66,7 @@ class _AppShellState extends State<AppShell> {
       sequenceController: widget.sequenceController,
     );
     _savedSequenceController = SavedSequenceController();
+    _profilePreferencesController = ProfilePreferencesController();
 
     _libraryController = LibraryController(
       sequenceController: widget.sequenceController,
@@ -74,6 +77,7 @@ class _AppShellState extends State<AppShell> {
 
     unawaited(_bookmarkController.initialize());
     unawaited(_savedSequenceController.initialize());
+    unawaited(_profilePreferencesController.initialize());
     unawaited(_remoteAddressablesService.initializeLibrary());
 
     _pages = [
@@ -98,7 +102,7 @@ class _AppShellState extends State<AppShell> {
         libraryController: _libraryController,
         savedSequenceController: _savedSequenceController,
         onBuildSequence: _buildSavedSequence,
-        onEditSequence: _editSavedSequence,
+        preferencesController: _profilePreferencesController,
       ),
     ];
   }
@@ -109,6 +113,7 @@ class _AppShellState extends State<AppShell> {
     _bookmarkController.dispose();
     _sequenceHistoryController.dispose();
     _savedSequenceController.dispose();
+    _profilePreferencesController.dispose();
     _remoteAddressablesService.dispose();
     super.dispose();
   }
@@ -153,12 +158,6 @@ class _AppShellState extends State<AppShell> {
 
     if (!mounted) return;
     setState(() => _currentIndex = 2);
-  }
-
-  void _editSavedSequence(SavedSequence sequence) {
-    widget.sequenceController.setSequenceName(sequence.name);
-    _sequenceHistoryController.replaceAll(sequence.animations);
-    setState(() => _currentIndex = 3);
   }
 
   Future<void> _openUnityPreview() async {

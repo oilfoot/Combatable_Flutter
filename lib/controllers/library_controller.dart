@@ -175,6 +175,11 @@ class LibraryController extends ChangeNotifier {
     return entry.isRemote && !entry.isInstalled;
   }
 
+  Future<void> download(LibraryDisplayItem entry) async {
+    if (entry.isDownloading || !requiresDownload(entry)) return;
+    await _remoteAddressablesService.downloadAnimation(entry.item.downloadKey);
+  }
+
   Future<void> performPrimaryAction(
     LibraryDisplayItem entry, {
     String? transitionId,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../app_shell.dart';
 import '../controllers/library_controller.dart';
+import '../controllers/profile_preferences_controller.dart';
 import '../controllers/saved_sequence_controller.dart';
 import '../models/saved_sequence.dart';
 import '../theme/app_theme.dart';
@@ -21,32 +22,40 @@ class ProfileScreen extends StatefulWidget {
     required this.libraryController,
     required this.savedSequenceController,
     required this.onBuildSequence,
-    required this.onEditSequence,
+    required this.preferencesController,
   });
 
   final LibraryController libraryController;
   final SavedSequenceController savedSequenceController;
   final Future<void> Function(SavedSequence sequence) onBuildSequence;
-  final ValueChanged<SavedSequence> onEditSequence;
+  final ProfilePreferencesController preferencesController;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  ProfileCollection _selectedCollection = ProfileCollection.favorites;
+  String? _buildingSequenceId;
+
+  ProfileCollection get _selectedCollection =>
+      widget.preferencesController.selectedCollection ==
+          ProfileCollectionPreference.sequences
+      ? ProfileCollection.sequences
+      : ProfileCollection.favorites;
 
   @override
   void initState() {
     super.initState();
     widget.libraryController.addListener(_onLibraryChanged);
     widget.savedSequenceController.addListener(_onSavedSequencesChanged);
+    widget.preferencesController.addListener(_onPreferencesChanged);
   }
 
   @override
   void dispose() {
     widget.libraryController.removeListener(_onLibraryChanged);
     widget.savedSequenceController.removeListener(_onSavedSequencesChanged);
+    widget.preferencesController.removeListener(_onPreferencesChanged);
     super.dispose();
   }
 
@@ -58,9 +67,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() {});
   }
 
+  void _onPreferencesChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _selectCollection(ProfileCollection collection) {
     if (_selectedCollection == collection) return;
-    setState(() => _selectedCollection = collection);
+    widget.preferencesController.selectCollection(
+      collection == ProfileCollection.sequences
+          ? ProfileCollectionPreference.sequences
+          : ProfileCollectionPreference.favorites,
+    );
   }
 
   void _showPlaceholder(String feature) {
@@ -113,14 +130,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
       MaterialPageRoute<void>(
         builder: (_) => SavedSequenceDetailScreen(
           sequence: sequence,
-          resolvePreviewPath: widget.libraryController.getOrDownloadPreview,
-          resolveCachedPreviewPath:
-              widget.libraryController.getCachedPreviewPath,
           onBuildSequence: widget.onBuildSequence,
-          onEditSequence: widget.onEditSequence,
+          savedSequenceController: widget.savedSequenceController,
+          libraryController: widget.libraryController,
         ),
       ),
     );
+  }
+
+  Future<void> _buildSavedSequence(SavedSequence sequence) async {
+    if (_buildingSequenceId != null) return;
+    setState(() => _buildingSequenceId = sequence.id);
+
+    try {
+      await widget.onBuildSequence(sequence);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Unity could not open this sequence.'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.elevatedSurface,
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _buildingSequenceId = null);
+    }
   }
 
   @override
@@ -179,6 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           key: const ValueKey(ProfileCollection.sequences),
                           entries: widget.savedSequenceController.sequences,
                           onSequencePressed: _openSavedSequenceDetails,
+                          onBuildPressed: _buildSavedSequence,
+                          buildingSequenceId: _buildingSequenceId,
                         ),
                 ),
               ),

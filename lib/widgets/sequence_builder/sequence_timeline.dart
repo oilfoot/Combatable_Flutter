@@ -17,6 +17,7 @@ class _TimelineSection extends StatefulWidget {
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
     this.readOnly = false,
+    this.allowItemTap = false,
   });
 
   final List<_TimelineVisualStep> steps;
@@ -30,6 +31,7 @@ class _TimelineSection extends StatefulWidget {
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
   final bool readOnly;
+  final bool allowItemTap;
 
   @override
   State<_TimelineSection> createState() => _TimelineSectionState();
@@ -149,7 +151,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 onRemove: widget.readOnly
                     ? null
                     : () => widget.onRemoveAt(index),
-                onTap: widget.readOnly
+                onTap: widget.readOnly && !widget.allowItemTap
                     ? null
                     : () => widget.onItemTap(widget.steps[index].item),
                 resolvePreviewPath: widget.resolvePreviewPath,

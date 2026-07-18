@@ -53,6 +53,45 @@ class SavedSequenceController extends ChangeNotifier {
     return sequence;
   }
 
+  Future<SavedSequence> update({
+    required String id,
+    required String name,
+    required List<AnimationLibraryItem> animations,
+  }) async {
+    await initialize();
+
+    final index = _sequences.indexWhere((sequence) => sequence.id == id);
+    if (index < 0) {
+      throw StateError('The saved sequence no longer exists.');
+    }
+
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'A sequence name is required.');
+    }
+    if (animations.length < 2) {
+      throw ArgumentError.value(
+        animations.length,
+        'animations',
+        'At least two animation steps are required.',
+      );
+    }
+
+    final previous = _sequences[index];
+    final updated = SavedSequence(
+      id: previous.id,
+      name: normalizedName,
+      animations: List<AnimationLibraryItem>.unmodifiable(animations),
+      createdAt: previous.createdAt,
+      updatedAt: DateTime.now(),
+    );
+
+    _sequences[index] = updated;
+    notifyListeners();
+    await _enqueueWrite();
+    return updated;
+  }
+
   Future<void> _load() async {
     final directory = await getApplicationSupportDirectory();
     final file = File('${directory.path}/saved_sequences.json');

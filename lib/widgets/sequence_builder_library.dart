@@ -17,6 +17,7 @@ class SequenceBuilderLibrary extends StatefulWidget {
     required this.libraryController,
     required this.onItemTap,
     required this.onPrimaryAction,
+    this.showNavigationScrim = true,
   });
 
   final SequenceBuilderLibraryPanelState panelState;
@@ -27,6 +28,7 @@ class SequenceBuilderLibrary extends StatefulWidget {
   final Future<void> Function(LibraryDisplayItem entry) onItemTap;
   final Future<void> Function(GlobalKey sourceKey, LibraryDisplayItem entry)
   onPrimaryAction;
+  final bool showNavigationScrim;
 
   static const double fullyCollapsedHeight = 176;
   static const double collapsedHeight = 272;
@@ -302,9 +304,11 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                                       width: double.infinity,
                                       height: gridHeight,
                                       child: GridView.builder(
-                                        padding: const EdgeInsets.only(
-                                          bottom: AppShell
-                                              .floatingNavExtraScrollSpace,
+                                        padding: EdgeInsets.only(
+                                          bottom: widget.showNavigationScrim
+                                              ? AppShell
+                                                    .floatingNavExtraScrollSpace
+                                              : AppSpacing.panel,
                                         ),
                                         physics: expandedProgress > 0
                                             ? const BouncingScrollPhysics()
@@ -373,28 +377,29 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                 ),
               ],
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: -_bottomPadding,
-              height: _navigationScrimHeight,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.transparent,
-                        AppColors.panel,
-                        AppColors.panel,
-                      ],
-                      stops: [0, _navigationScrimFadeEnd, 1],
+            if (widget.showNavigationScrim)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: -_bottomPadding,
+                height: _navigationScrimHeight,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppColors.transparent,
+                          AppColors.panel,
+                          AppColors.panel,
+                        ],
+                        stops: [0, _navigationScrimFadeEnd, 1],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

@@ -52,11 +52,19 @@ class SequenceTimelineViewer extends StatelessWidget {
     required this.animations,
     required this.resolvePreviewPath,
     required this.resolveCachedPreviewPath,
+    this.readOnly = true,
+    this.onRemoveAt,
+    this.onItemTap,
+    this.onAddStep,
   });
 
   final List<AnimationLibraryItem> animations;
   final Future<String?> Function(String? previewPath) resolvePreviewPath;
   final String? Function(String? previewPath) resolveCachedPreviewPath;
+  final bool readOnly;
+  final ValueChanged<int>? onRemoveAt;
+  final ValueChanged<AnimationLibraryItem>? onItemTap;
+  final VoidCallback? onAddStep;
 
   @override
   Widget build(BuildContext context) {
@@ -81,12 +89,44 @@ class SequenceTimelineViewer extends StatelessWidget {
       requiredNextPosition: animations.isEmpty
           ? 'Any'
           : animations.last.endPosition,
-      onRemoveAt: (_) {},
-      onItemTap: (_) {},
-      onAddStep: () {},
+      onRemoveAt: onRemoveAt ?? (_) {},
+      onItemTap: onItemTap ?? (_) {},
+      onAddStep: onAddStep ?? () {},
       resolvePreviewPath: resolvePreviewPath,
       resolveCachedPreviewPath: resolveCachedPreviewPath,
-      readOnly: true,
+      readOnly: readOnly,
+      allowItemTap: onItemTap != null,
+    );
+  }
+}
+
+class SequenceTimelineActions extends StatelessWidget {
+  const SequenceTimelineActions({
+    super.key,
+    required this.canUndo,
+    required this.canRedo,
+    required this.canClear,
+    required this.onUndo,
+    required this.onRedo,
+    required this.onClear,
+  });
+
+  final bool canUndo;
+  final bool canRedo;
+  final bool canClear;
+  final VoidCallback onUndo;
+  final VoidCallback onRedo;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TimelineActions(
+      canUndo: canUndo,
+      canRedo: canRedo,
+      canClear: canClear,
+      onUndo: onUndo,
+      onRedo: onRedo,
+      onClear: onClear,
     );
   }
 }
