@@ -124,6 +124,7 @@ class AnimationCard extends StatelessWidget {
     this.showPrimaryAction = true,
     this.borderRadius,
     this.primaryActionIcon,
+    this.titleTextStyle,
   }) : variant = AnimationCardVariant.standard,
        onInfoTap = null;
 
@@ -145,7 +146,8 @@ class AnimationCard extends StatelessWidget {
        onBookmarkTap = null,
        showPrimaryAction = true,
        borderRadius = null,
-       primaryActionIcon = null;
+       primaryActionIcon = null,
+       titleTextStyle = null;
 
   final AnimationLibraryItem item;
   final AnimationCardVariant variant;
@@ -164,6 +166,7 @@ class AnimationCard extends StatelessWidget {
   final bool showPrimaryAction;
   final double? borderRadius;
   final IconData? primaryActionIcon;
+  final TextStyle? titleTextStyle;
 
   bool get _isCompact => variant == AnimationCardVariant.compact;
   double get _borderRadius =>
@@ -351,7 +354,7 @@ class AnimationCard extends StatelessWidget {
             item.title,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: AppTypography.button.copyWith(
+            style: (titleTextStyle ?? AppTypography.button).copyWith(
               color: AppColors.textPrimary,
               height: 1.05,
               letterSpacing: -0.25,

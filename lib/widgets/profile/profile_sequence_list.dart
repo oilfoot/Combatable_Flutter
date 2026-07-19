@@ -93,17 +93,21 @@ class _SavedSequenceRow extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
-                          Row(
-                            children: [
-                              _StepCountBadge(count: entry.stepCount),
-                              const SizedBox(width: AppSpacing.sm),
-                              Expanded(
-                                child: _PositionRange(
-                                  startPosition: entry.startPosition,
-                                  endPosition: entry.endPosition,
-                                ),
-                              ),
-                            ],
+                          _PositionLine(
+                            label: 'Start',
+                            value: entry.startPosition,
+                          ),
+                          const SizedBox(height: AppSpacing.xxs),
+                          _PositionLine(label: 'End', value: entry.endPosition),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '${entry.stepCount} animation '
+                            'step${entry.stepCount == 1 ? '' : 's'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
@@ -169,58 +173,6 @@ class _SequenceCoverPlaceholder extends StatelessWidget {
   }
 }
 
-class _StepCountBadge extends StatelessWidget {
-  const _StepCountBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.xs,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.accent.withValues(alpha: AppOpacity.subtle),
-        borderRadius: BorderRadius.circular(AppRadii.pill),
-        border: Border.all(
-          color: AppColors.accentSoft.withValues(alpha: AppOpacity.muted),
-        ),
-      ),
-      child: Text(
-        '$count steps',
-        style: AppTypography.caption.copyWith(
-          color: AppColors.accentSoft,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _PositionRange extends StatelessWidget {
-  const _PositionRange({
-    required this.startPosition,
-    required this.endPosition,
-  });
-
-  final String startPosition;
-  final String endPosition;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _PositionLine(label: 'Start', value: startPosition),
-        const SizedBox(height: AppSpacing.xs),
-        _PositionLine(label: 'End', value: endPosition),
-      ],
-    );
-  }
-}
-
 class _PositionLine extends StatelessWidget {
   const _PositionLine({required this.label, required this.value});
 
@@ -229,22 +181,30 @@ class _PositionLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text.rich(
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      TextSpan(
-        style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
-        children: [
-          TextSpan(text: '$label  '),
-          TextSpan(
-            text: value,
-            style: const TextStyle(
+    return Row(
+      children: [
+        SizedBox(
+          width: 34,
+          child: Text(
+            label,
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.caption.copyWith(
               color: AppColors.accentSoft,
               fontWeight: FontWeight.w700,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

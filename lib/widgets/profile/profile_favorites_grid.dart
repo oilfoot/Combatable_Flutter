@@ -52,6 +52,7 @@ class ProfileFavoritesGrid extends StatelessWidget {
               : 'Add',
           showPrimaryAction: false,
           borderRadius: AppRadii.card,
+          titleTextStyle: AppTypography.compactCardTitle,
           isBookmarked: true,
           resolvePreviewPath: resolvePreviewPath,
           resolveCachedPreviewPath: resolveCachedPreviewPath,
