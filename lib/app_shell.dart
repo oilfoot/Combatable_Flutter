@@ -217,6 +217,7 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       extendBody: true,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
@@ -20,36 +22,42 @@ class LibraryCategoryPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 10),
-      child: Material(
-        color: AppColors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadii.pill),
-          child: AnimatedContainer(
-            duration: AppMotion.quick,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected ? AppColors.accent : AppColors.surface,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Material(
+            color: AppColors.transparent,
+            child: InkWell(
+              onTap: onTap,
               borderRadius: BorderRadius.circular(AppRadii.pill),
-              border: Border.all(
-                color: selected ? AppColors.accent : AppColors.borderSubtle,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 16, color: AppColors.textPrimary),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
-                Text(
-                  label,
-                  style: AppTypography.controlLabel.copyWith(
-                    color: AppColors.textPrimary,
+              child: AnimatedContainer(
+                duration: AppMotion.quick,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.accent : AppColors.glassControl,
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                  border: Border.all(
+                    color: selected ? AppColors.accent : AppColors.borderStrong,
                   ),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (icon != null) ...[
+                      Icon(icon, size: 16, color: AppColors.textPrimary),
+                      const SizedBox(width: AppSpacing.sm),
+                    ],
+                    Text(
+                      label,
+                      style: AppTypography.controlLabel.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -72,46 +80,54 @@ class LibraryFilterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox.square(
       dimension: 44,
-      child: Material(
-        color: activeCount > 0 ? AppColors.accent : AppColors.surface,
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadii.medium),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadii.medium),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const Center(
-                child: Icon(
-                  Icons.tune_rounded,
-                  size: 22,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              if (activeCount > 0)
-                Positioned(
-                  top: -5,
-                  right: -5,
-                  child: Container(
-                    width: 20,
-                    height: 20,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Material(
+            color: activeCount > 0 ? AppColors.accent : AppColors.glassControl,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(AppRadii.medium),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Center(
+                    child: Icon(
+                      Icons.tune_rounded,
+                      size: 22,
                       color: AppColors.textPrimary,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.background, width: 2),
-                    ),
-                    child: Text(
-                      '$activeCount',
-                      style: const TextStyle(
-                        color: AppColors.background,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
                     ),
                   ),
-                ),
-            ],
+                  if (activeCount > 0)
+                    Positioned(
+                      top: -5,
+                      right: -5,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.textPrimary,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.background,
+                            width: 2,
+                          ),
+                        ),
+                        child: Text(
+                          '$activeCount',
+                          style: const TextStyle(
+                            color: AppColors.background,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

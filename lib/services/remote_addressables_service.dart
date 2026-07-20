@@ -246,11 +246,13 @@ class RemoteAddressablesService extends ChangeNotifier {
         notifyListeners();
       }
 
-      await _downloadMainManifestToLocal(
+      final manifestWasRefreshed = await _downloadMainManifestToLocal(
         addressablesDir: addressablesDir,
         forceRefresh: forceRefresh,
       );
-      await _restoreStateFromDisk(addressablesDir: addressablesDir);
+      if (!restoredFromCache || manifestWasRefreshed) {
+        await _restoreStateFromDisk(addressablesDir: addressablesDir);
+      }
       await _loadMissingCategoryManifests();
 
       _status =
@@ -551,7 +553,7 @@ class RemoteAddressablesService extends ChangeNotifier {
     }
   }
 
-  Future<void> _downloadMainManifestToLocal({
+  Future<bool> _downloadMainManifestToLocal({
     required Directory addressablesDir,
     required bool forceRefresh,
   }) async {
@@ -567,7 +569,7 @@ class RemoteAddressablesService extends ChangeNotifier {
       final modifiedAt = await manifestLocalFile.lastModified();
       if (DateTime.now().difference(modifiedAt) <
           _mainManifestRefreshInterval) {
-        return;
+        return false;
       }
     }
 
@@ -585,6 +587,7 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     final manifestContent = await manifestLocalFile.readAsString();
     _manifest = _parseMainManifest(manifestContent);
+    return true;
   }
 
   Future<void> _ensureCoreFilesDownloaded({
@@ -635,6 +638,26 @@ class RemoteAddressablesService extends ChangeNotifier {
 
     _manifest = mainManifest;
 
+    // Publish the small category index immediately. Reading and validating
+    // every cached category file can take noticeably longer, but the UI can
+    // already reserve the correct shelves and skeleton card counts from the
+    // main manifest alone.
+    _categories
+      ..clear()
+      ..addAll(
+        mainManifest.categories.map(
+          (category) => RemoteAnimationCategory(
+            id: category.id,
+            displayName: category.displayName,
+            manifest: category.manifest,
+            version: category.version,
+            count: category.count,
+          ),
+        ),
+      );
+    _availableItems.clear();
+    notifyListeners();
+
     final allEntries = <_AnimationManifestEntry>[];
 
     _loadedCategoryIds.clear();
@@ -661,23 +684,17 @@ class RemoteAddressablesService extends ChangeNotifier {
 
       allEntries.addAll(entries);
       _loadedCategoryIds.add(category.id);
+
+      // Fill the already visible skeleton shelves progressively as each
+      // cached category becomes available.
+      _manifest = mainManifest.copyWith(entries: List.of(allEntries));
+      _availableItems
+        ..clear()
+        ..addAll(allEntries.map(_toLibraryItem));
+      notifyListeners();
     }
 
     _manifest = mainManifest.copyWith(entries: allEntries);
-
-    _categories
-      ..clear()
-      ..addAll(
-        mainManifest.categories.map(
-          (category) => RemoteAnimationCategory(
-            id: category.id,
-            displayName: category.displayName,
-            manifest: category.manifest,
-            version: category.version,
-            count: category.count,
-          ),
-        ),
-      );
 
     _availableItems
       ..clear()

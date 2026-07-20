@@ -49,6 +49,9 @@ Future<void> showLibraryFilterSheet(
   var startQuery = '';
   var endQuery = '';
   var tagQuery = '';
+  var startExpanded = false;
+  var endExpanded = false;
+  var tagsExpanded = false;
 
   void emitSelection() {
     onChanged(
@@ -75,6 +78,29 @@ Future<void> showLibraryFilterSheet(
           final visibleStartPositions = _matching(startPositions, startQuery);
           final visibleEndPositions = _matching(endPositions, endQuery);
           final visibleTags = _matching(tags, tagQuery);
+          final displayedStartPositions =
+              startExpanded || startQuery.trim().isNotEmpty
+              ? visibleStartPositions
+              : _collapsedChoices(
+                  visibleStartPositions,
+                  selectedValue: startPosition,
+                  limit: 5,
+                );
+          final displayedEndPositions =
+              endExpanded || endQuery.trim().isNotEmpty
+              ? visibleEndPositions
+              : _collapsedChoices(
+                  visibleEndPositions,
+                  selectedValue: endPosition,
+                  limit: 5,
+                );
+          final displayedTags = tagsExpanded || tagQuery.trim().isNotEmpty
+              ? visibleTags
+              : _collapsedChoices(
+                  visibleTags,
+                  selectedValues: selectedTags,
+                  limit: 6,
+                );
 
           void update(VoidCallback mutation) {
             setSheetState(mutation);
@@ -164,12 +190,23 @@ Future<void> showLibraryFilterSheet(
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           _SingleChoiceSelector(
-                            values: visibleStartPositions,
+                            values: displayedStartPositions,
                             selectedValue: startPosition,
                             showAny: startQuery.trim().isEmpty,
                             onSelected: (value) =>
                                 update(() => startPosition = value),
                           ),
+                          if (startQuery.trim().isEmpty &&
+                              visibleStartPositions.length > 5)
+                            _ExpandChoicesButton(
+                              expanded: startExpanded,
+                              hiddenCount:
+                                  visibleStartPositions.length -
+                                  displayedStartPositions.length,
+                              onPressed: () => setSheetState(
+                                () => startExpanded = !startExpanded,
+                              ),
+                            ),
                           const SizedBox(height: AppSpacing.xl),
                           const Text(
                             'End position',
@@ -183,12 +220,23 @@ Future<void> showLibraryFilterSheet(
                           ),
                           const SizedBox(height: AppSpacing.sm),
                           _SingleChoiceSelector(
-                            values: visibleEndPositions,
+                            values: displayedEndPositions,
                             selectedValue: endPosition,
                             showAny: endQuery.trim().isEmpty,
                             onSelected: (value) =>
                                 update(() => endPosition = value),
                           ),
+                          if (endQuery.trim().isEmpty &&
+                              visibleEndPositions.length > 5)
+                            _ExpandChoicesButton(
+                              expanded: endExpanded,
+                              hiddenCount:
+                                  visibleEndPositions.length -
+                                  displayedEndPositions.length,
+                              onPressed: () => setSheetState(
+                                () => endExpanded = !endExpanded,
+                              ),
+                            ),
                           if (tags.isNotEmpty) ...[
                             const SizedBox(height: AppSpacing.xl),
                             const Text(
@@ -203,7 +251,7 @@ Future<void> showLibraryFilterSheet(
                             ),
                             const SizedBox(height: AppSpacing.sm),
                             _MultiChoiceSelector(
-                              values: visibleTags,
+                              values: displayedTags,
                               selectedValues: selectedTags,
                               onToggle: (value) => update(() {
                                 if (!selectedTags.add(value)) {
@@ -211,6 +259,16 @@ Future<void> showLibraryFilterSheet(
                                 }
                               }),
                             ),
+                            if (tagQuery.trim().isEmpty &&
+                                visibleTags.length > 6)
+                              _ExpandChoicesButton(
+                                expanded: tagsExpanded,
+                                hiddenCount:
+                                    visibleTags.length - displayedTags.length,
+                                onPressed: () => setSheetState(
+                                  () => tagsExpanded = !tagsExpanded,
+                                ),
+                              ),
                           ],
                         ],
                       ),
@@ -242,6 +300,28 @@ List<String> _matching(List<String> values, String query) {
   return values
       .where((value) => value.toLowerCase().contains(normalized))
       .toList(growable: false);
+}
+
+List<String> _collapsedChoices(
+  List<String> values, {
+  String? selectedValue,
+  Set<String> selectedValues = const {},
+  required int limit,
+}) {
+  if (values.length <= limit) return values;
+
+  final priorityValues = <String>{
+    ?selectedValue,
+    ...selectedValues,
+  }.where(values.contains).toList(growable: false);
+  final result = <String>[...priorityValues];
+
+  for (final value in values) {
+    if (result.contains(value)) continue;
+    if (result.length >= limit) break;
+    result.add(value);
+  }
+  return result;
 }
 
 class _SheetHandle extends StatelessWidget {
@@ -354,6 +434,35 @@ class _FilterToggle extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpandChoicesButton extends StatelessWidget {
+  const _ExpandChoicesButton({
+    required this.expanded,
+    required this.hiddenCount,
+    required this.onPressed,
+  });
+
+  final bool expanded;
+  final int hiddenCount;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(
+          expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+          size: 20,
+        ),
+        label: Text(
+          expanded || hiddenCount <= 0 ? 'Show less' : 'Show $hiddenCount more',
         ),
       ),
     );

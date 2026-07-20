@@ -49,8 +49,35 @@ class LibraryController extends ChangeNotifier {
 
   String? _selectedCategoryId;
 
-  List<RemoteAnimationCategory> get categories =>
-      _remoteAddressablesService.categories;
+  static const List<RemoteAnimationCategory> _bootstrapCategories = [
+    RemoteAnimationCategory(
+      id: 'control',
+      displayName: 'Control',
+      manifest: '',
+      version: '',
+      count: 6,
+    ),
+    RemoteAnimationCategory(
+      id: 'fundamentals',
+      displayName: 'Fundamentals',
+      manifest: '',
+      version: '',
+      count: 6,
+    ),
+  ];
+
+  List<RemoteAnimationCategory> get categories {
+    final liveCategories = {
+      for (final category in _remoteAddressablesService.categories)
+        category.id.toLowerCase(): category,
+    };
+    final merged = <RemoteAnimationCategory>[
+      for (final fallback in _bootstrapCategories)
+        liveCategories.remove(fallback.id.toLowerCase()) ?? fallback,
+      ...liveCategories.values,
+    ];
+    return List.unmodifiable(merged);
+  }
 
   String? get selectedCategoryId => _selectedCategoryId;
   bool get isLoadingMetadata =>
@@ -65,8 +92,15 @@ class LibraryController extends ChangeNotifier {
 
     final categoryId = _selectedCategoryId;
     if (categoryId != null && categoryId.isNotEmpty) {
-      final expected = _remoteAddressablesService
+      final remoteExpected = _remoteAddressablesService
           .expectedAnimationCountForCategory(categoryId);
+      final expected = remoteExpected > 0
+          ? remoteExpected
+          : categories
+                    .where((category) => category.id == categoryId)
+                    .map((category) => category.count)
+                    .firstOrNull ??
+                6;
       final loaded = _remoteAddressablesService.loadedAnimationCountForCategory(
         categoryId,
       );
@@ -80,16 +114,27 @@ class LibraryController extends ChangeNotifier {
   }
 
   Future<void> selectCategory(String? categoryId) async {
-    _selectedCategoryId = categoryId;
+    final liveCategory = categoryId == null
+        ? null
+        : _remoteAddressablesService.categories
+              .where(
+                (category) =>
+                    category.id.toLowerCase() == categoryId.toLowerCase(),
+              )
+              .firstOrNull;
+    final resolvedCategoryId = liveCategory?.id ?? categoryId;
+
+    _selectedCategoryId = resolvedCategoryId;
     notifyListeners();
 
-    if (categoryId == null || categoryId.isEmpty) return;
+    if (resolvedCategoryId == null || resolvedCategoryId.isEmpty) return;
+    if (liveCategory == null) return;
 
-    await _remoteAddressablesService.loadCategory(categoryId);
+    await _remoteAddressablesService.loadCategory(resolvedCategoryId);
   }
 
   Future<void> loadAllCategories() async {
-    for (final category in categories) {
+    for (final category in _remoteAddressablesService.categories) {
       await _remoteAddressablesService.loadCategory(category.id);
     }
   }

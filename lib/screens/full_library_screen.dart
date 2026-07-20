@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ import '../widgets/library/library_browse_controls.dart';
 import '../widgets/library/library_explore_section.dart';
 import '../widgets/library/library_filter_sheet.dart';
 import '../widgets/sequence_builder/smart_connect_dialog.dart';
+import 'library_browse_screen.dart';
 
 class FullLibraryScreen extends StatefulWidget {
   const FullLibraryScreen({
@@ -32,11 +34,14 @@ class FullLibraryScreen extends StatefulWidget {
 class _FullLibraryScreenState extends State<FullLibraryScreen> {
   static const _arrivalHapticDelay = Duration(milliseconds: 90);
   static const _searchDelay = Duration(milliseconds: 140);
+  static const _minimumInitialSkeletonTime = Duration(milliseconds: 350);
 
   bool _isExploreMode = true;
   LibraryFilterSelection _filters = LibraryFilterSelection();
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounce;
+  Timer? _initialSkeletonTimer;
+  bool _showInitialSkeletonLayout = true;
   String _searchInput = '';
   String _query = '';
   Map<String, String> _searchIndex = const {};
@@ -46,12 +51,17 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
     super.initState();
     widget.libraryController.addListener(_onLibraryChanged);
     _rebuildSearchIndex();
+    _initialSkeletonTimer = Timer(_minimumInitialSkeletonTime, () {
+      if (!mounted) return;
+      setState(() => _showInitialSkeletonLayout = false);
+    });
   }
 
   @override
   void dispose() {
     widget.libraryController.removeListener(_onLibraryChanged);
     _searchDebounce?.cancel();
+    _initialSkeletonTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -153,6 +163,20 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
     unawaited(widget.libraryController.selectCategory(categoryId));
   }
 
+  void _openViewAll({required String title, String? categoryId}) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LibraryBrowseScreen(
+          title: title,
+          categoryId: categoryId,
+          libraryController: widget.libraryController,
+          sequenceBuilderNavKey: widget.sequenceBuilderNavKey,
+        ),
+      ),
+    );
+  }
+
   Future<void> _showFilters() async {
     setState(() => _isExploreMode = false);
     await showLibraryFilterSheet(
@@ -250,12 +274,15 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
   Widget build(BuildContext context) {
     final library = widget.libraryController;
     final theme = Theme.of(context);
-    final items = _applyFilters(library.categoryFilteredItems);
-    final isInitialLoading = library.allItems.isEmpty;
+    final filteredItems = _applyFilters(library.categoryFilteredItems);
+    final revealRealCards =
+        !_showInitialSkeletonLayout && !library.isLoadingMetadata;
+    final items = !revealRealCards
+        ? const <LibraryDisplayItem>[]
+        : filteredItems;
+    final isInitialLoading = !revealRealCards;
     final reportedPlaceholderCount = library.metadataPlaceholderCount;
-    final placeholderCount = isInitialLoading
-        ? (reportedPlaceholderCount < 6 ? 6 : reportedPlaceholderCount)
-        : reportedPlaceholderCount;
+    final placeholderCount = isInitialLoading ? 6 : reportedPlaceholderCount;
     final topPadding = MediaQuery.paddingOf(context).top + 230;
     final showExplore = _isExploreMode && _query.isEmpty;
 
@@ -265,8 +292,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           if (showExplore)
             _buildExploreContent(
               topPadding,
-              showLoadingSkeletons:
-                  library.isLoadingMetadata || isInitialLoading,
+              showLoadingSkeletons: !revealRealCards,
             )
           else
             _buildBrowseContent(
@@ -310,104 +336,121 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  SizedBox(
-                    height: 46,
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      textInputAction: TextInputAction.search,
-                      style: AppTypography.body,
-                      decoration: InputDecoration(
-                        hintText: 'Search animations...',
-                        hintStyle: AppTypography.body.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                        prefixIcon: const Icon(Icons.search_rounded, size: 21),
-                        suffixIcon: _searchInput.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'Clear search',
-                                onPressed: _clearSearch,
-                                icon: const Icon(Icons.close_rounded, size: 20),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.button),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: SizedBox(
+                        height: 46,
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: _onSearchChanged,
+                          onTapOutside: (_) =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                          textInputAction: TextInputAction.search,
+                          style: AppTypography.body,
+                          decoration: InputDecoration(
+                            hintText: 'Search animations...',
+                            hintStyle: AppTypography.body.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.search_rounded,
+                              size: 21,
+                            ),
+                            suffixIcon: _searchInput.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear search',
+                                    onPressed: _clearSearch,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 20,
+                                    ),
+                                  ),
+                            filled: true,
+                            fillColor: AppColors.glassControl,
+                            contentPadding: EdgeInsets.zero,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.button,
                               ),
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        contentPadding: EdgeInsets.zero,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadii.button),
-                          borderSide: const BorderSide(
-                            color: AppColors.borderSubtle,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadii.button),
-                          borderSide: const BorderSide(
-                            color: AppColors.borderSubtle,
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadii.button),
-                          borderSide: const BorderSide(
-                            color: AppColors.accentSoft,
+                              borderSide: const BorderSide(
+                                color: AppColors.borderStrong,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.button,
+                              ),
+                              borderSide: const BorderSide(
+                                color: AppColors.borderStrong,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.button,
+                              ),
+                              borderSide: const BorderSide(
+                                color: AppColors.accentSoft,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  ColoredBox(
-                    color: theme.scaffoldBackgroundColor,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ClipRect(
-                            child: SizedBox(
-                              height: 44,
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                children: [
-                                  LibraryCategoryPill(
-                                    label: 'Explore',
-                                    icon: Icons.auto_awesome_rounded,
-                                    selected: showExplore,
-                                    onTap: _showExplore,
-                                  ),
-                                  LibraryCategoryPill(
-                                    label: 'All',
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ClipRect(
+                          child: SizedBox(
+                            height: 44,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                LibraryCategoryPill(
+                                  label: 'Explore',
+                                  icon: Icons.auto_awesome_rounded,
+                                  selected: showExplore,
+                                  onTap: _showExplore,
+                                ),
+                                LibraryCategoryPill(
+                                  label: 'All',
+                                  selected:
+                                      !showExplore &&
+                                      library.selectedCategoryId == null,
+                                  onTap: _showAll,
+                                ),
+                                ...library.categories.map(
+                                  (category) => LibraryCategoryPill(
+                                    label: category.displayName,
                                     selected:
                                         !showExplore &&
-                                        library.selectedCategoryId == null,
-                                    onTap: _showAll,
+                                        library.selectedCategoryId ==
+                                            category.id,
+                                    onTap: () => _showCategory(category.id),
                                   ),
-                                  ...library.categories.map(
-                                    (category) => LibraryCategoryPill(
-                                      label: category.displayName,
-                                      selected:
-                                          !showExplore &&
-                                          library.selectedCategoryId ==
-                                              category.id,
-                                      onTap: () => _showCategory(category.id),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        Container(
-                          width: 1,
-                          height: 30,
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                          ),
-                          color: AppColors.borderStrong,
+                      ),
+                      Container(
+                        width: 1,
+                        height: 30,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
                         ),
-                        LibraryFilterButton(
-                          activeCount: _filters.activeCount,
-                          onTap: _showFilters,
-                        ),
-                      ],
-                    ),
+                        color: AppColors.borderStrong,
+                      ),
+                      LibraryFilterButton(
+                        activeCount: _filters.activeCount,
+                        onTap: _showFilters,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -423,18 +466,20 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
     required bool showLoadingSkeletons,
   }) {
     final library = widget.libraryController;
-    final allItems = _applyFilters(library.allItems);
+    final allItems = showLoadingSkeletons
+        ? const <LibraryDisplayItem>[]
+        : _applyFilters(library.allItems);
     final sections = <_ExploreSectionData>[];
 
-    if (allItems.isNotEmpty) {
+    if (showLoadingSkeletons || allItems.isNotEmpty) {
       final featuredItems = allItems.take(6).toList(growable: false);
       sections.add(
         _ExploreSectionData(
           title: 'Featured animations',
           subtitle: 'A simple place to start',
           items: featuredItems,
-          placeholderCount: showLoadingSkeletons ? 6 - featuredItems.length : 0,
-          onViewAll: _showAll,
+          placeholderCount: showLoadingSkeletons ? 6 : 0,
+          onViewAll: () => _openViewAll(title: 'Featured animations'),
         ),
       );
     }
@@ -445,10 +490,7 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           .take(6)
           .toList(growable: false);
       final expectedCardCount = category.count < 6 ? category.count : 6;
-      final missingCardCount = expectedCardCount - categoryItems.length;
-      final placeholderCount = showLoadingSkeletons && missingCardCount > 0
-          ? missingCardCount
-          : 0;
+      final placeholderCount = showLoadingSkeletons ? expectedCardCount : 0;
       if (categoryItems.isEmpty && placeholderCount == 0) continue;
       sections.add(
         _ExploreSectionData(
@@ -456,7 +498,10 @@ class _FullLibraryScreenState extends State<FullLibraryScreen> {
           subtitle: 'Explore ${category.displayName.toLowerCase()}',
           items: categoryItems,
           placeholderCount: placeholderCount,
-          onViewAll: () => _showCategory(category.id),
+          onViewAll: () => _openViewAll(
+            title: category.displayName,
+            categoryId: category.id,
+          ),
         ),
       );
     }

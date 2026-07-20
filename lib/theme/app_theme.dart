@@ -21,6 +21,9 @@ abstract final class AppColors {
   static const textDisabled = Color(0x33FFFFFF);
 
   static const surface = Color(0x0FFFFFFF);
+
+  /// Dark translucent fill for controls placed over scrolling content.
+  static const glassControl = Color(0xC9121015);
   static const borderSubtle = Color(0x17FFFFFF);
   static const borderStrong = Color(0x29FFFFFF);
 
