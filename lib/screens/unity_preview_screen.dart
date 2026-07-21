@@ -158,14 +158,22 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
                   ),
                   child: ValueListenableBuilder<double>(
                     valueListenable: _timelineValue,
-                    builder: (context, sliderValue, child) => Slider(
-                      value: sliderValue,
-                      min: 0.0,
-                      max: 1.0,
-                      onChangeStart: _beginTimelineScrub,
-                      onChanged: _updateTimelineScrub,
-                      onChangeEnd: _endTimelineScrub,
-                    ),
+                    builder: (context, targetValue, child) =>
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(end: targetValue),
+                          duration: _isScrubbing
+                              ? Duration.zero
+                              : const Duration(milliseconds: 20),
+                          curve: Curves.linear,
+                          builder: (context, displayedValue, child) => Slider(
+                            value: displayedValue.clamp(0.0, 1.0),
+                            min: 0.0,
+                            max: 1.0,
+                            onChangeStart: _beginTimelineScrub,
+                            onChanged: _updateTimelineScrub,
+                            onChangeEnd: _endTimelineScrub,
+                          ),
+                        ),
                   ),
                 ),
               ),
