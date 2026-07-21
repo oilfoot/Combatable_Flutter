@@ -91,11 +91,11 @@ class _SavedSequenceDetailScreenState extends State<SavedSequenceDetailScreen> {
 
   List<LibraryDisplayItem> get _matchingLibraryItems {
     if (_draftAnimations.isEmpty) {
-      return widget.libraryController.categoryFilteredItems;
+      return widget.libraryController.allItems;
     }
 
     final requiredPosition = _draftAnimations.last.endPosition;
-    return widget.libraryController.categoryFilteredItems
+    return widget.libraryController.allItems
         .where((entry) => entry.item.startPosition == requiredPosition)
         .toList(growable: false);
   }

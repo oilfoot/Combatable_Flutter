@@ -221,7 +221,7 @@ class LibraryController extends ChangeNotifier {
   }
 
   List<LibraryDisplayItem> get recommendedNextItems {
-    return categoryFilteredItems
+    return allItems
         .where((entry) => _sequenceController.canAddAnimation(entry.item))
         .toList();
   }

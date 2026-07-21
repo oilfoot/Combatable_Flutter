@@ -4,6 +4,7 @@ import '../app_shell.dart';
 import '../controllers/library_controller.dart';
 import '../theme/app_theme.dart';
 import 'animation/animation_card.dart';
+import 'library/sequence_builder_library_content.dart';
 
 enum SequenceBuilderLibraryPanelState { fullyCollapsed, collapsed, expanded }
 
@@ -281,7 +282,19 @@ class _SequenceBuilderLibraryState extends State<SequenceBuilderLibrary> {
                             ),
                           );
                         },
-                        child: widget.items.isEmpty && placeholderCount == 0
+                        child: isExpanded
+                            ? SequenceBuilderLibraryExpandedContent(
+                                key: const ValueKey('expanded-library-content'),
+                                items: widget.items,
+                                libraryController: widget.libraryController,
+                                onItemTap: widget.onItemTap,
+                                onPrimaryAction: widget.onPrimaryAction,
+                                placeholderCount: placeholderCount,
+                                bottomPadding: widget.showNavigationScrim
+                                    ? AppShell.floatingNavExtraScrollSpace
+                                    : AppSpacing.panel,
+                              )
+                            : widget.items.isEmpty && placeholderCount == 0
                             ? const _EmptyLibraryState(
                                 key: ValueKey('empty-library'),
                               )
