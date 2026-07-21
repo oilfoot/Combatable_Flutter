@@ -26,7 +26,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   StreamSubscription<double>? _timelineSub;
   StreamSubscription<String>? _testWordSub;
 
-  double _timelineValue = 0.0;
+  final ValueNotifier<double> _timelineValue = ValueNotifier<double>(0.0);
   bool _isScrubbing = false;
 
   String _unityTestWord = "No word received yet";
@@ -38,9 +38,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
     _timelineSub = widget.unityService.timelineValues.listen((value) {
       if (!mounted || _isScrubbing) return;
 
-      setState(() {
-        _timelineValue = value.clamp(0.0, 1.0);
-      });
+      _timelineValue.value = value.clamp(0.0, 1.0);
     });
 
     _testWordSub = widget.unityService.testWords.listen((word) {
@@ -53,28 +51,22 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   }
 
   Future<void> _beginTimelineScrub(double value) async {
-    setState(() {
-      _isScrubbing = true;
-      _timelineValue = value.clamp(0.0, 1.0);
-    });
+    _isScrubbing = true;
+    _timelineValue.value = value.clamp(0.0, 1.0);
 
     await widget.unityService.beginTimelineScrub();
     await widget.unityService.setTimelineValue(value);
   }
 
   Future<void> _updateTimelineScrub(double value) async {
-    setState(() {
-      _timelineValue = value.clamp(0.0, 1.0);
-    });
+    _timelineValue.value = value.clamp(0.0, 1.0);
 
     await widget.unityService.setTimelineValue(value);
   }
 
   Future<void> _endTimelineScrub(double value) async {
-    setState(() {
-      _isScrubbing = false;
-      _timelineValue = value.clamp(0.0, 1.0);
-    });
+    _isScrubbing = false;
+    _timelineValue.value = value.clamp(0.0, 1.0);
 
     await widget.unityService.setTimelineValue(value);
     await widget.unityService.endTimelineScrub();
@@ -84,13 +76,12 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   void dispose() {
     _timelineSub?.cancel();
     _testWordSub?.cancel();
+    _timelineValue.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final sliderValue = _timelineValue.clamp(0.0, 1.0).toDouble();
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -107,19 +98,8 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
               widget.unityService.markUnityReady();
 
               await widget.unityService.requestTestWord();
-
-              if (mounted) {
-                setState(() {});
-              }
             },
-            onMessage: (message) {
-              widget.unityService.handleUnityMessage(message);
-            },
-            onSceneLoaded: (scene) {
-              if (mounted) {
-                setState(() {});
-              }
-            },
+            onSceneLoaded: (scene) {},
           ),
 
           Positioned(
@@ -130,9 +110,11 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
+                  color: Colors.black.withValues(alpha: 0.65),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.15)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.15),
+                  ),
                 ),
                 child: Text(
                   _unityTestWord,
@@ -158,9 +140,11 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.55),
+                  color: Colors.black.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
                 ),
                 child: SliderTheme(
                   data: SliderTheme.of(context).copyWith(
@@ -172,13 +156,16 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
                       overlayRadius: 18,
                     ),
                   ),
-                  child: Slider(
-                    value: sliderValue,
-                    min: 0.0,
-                    max: 1.0,
-                    onChangeStart: _beginTimelineScrub,
-                    onChanged: _updateTimelineScrub,
-                    onChangeEnd: _endTimelineScrub,
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _timelineValue,
+                    builder: (context, sliderValue, child) => Slider(
+                      value: sliderValue,
+                      min: 0.0,
+                      max: 1.0,
+                      onChangeStart: _beginTimelineScrub,
+                      onChanged: _updateTimelineScrub,
+                      onChangeEnd: _endTimelineScrub,
+                    ),
                   ),
                 ),
               ),

@@ -49,25 +49,27 @@ class UnityService {
   }
 
   void handleUnityMessage(UnityMessage message) {
-    developer.log(
-      "🔥 UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
-      name: "UnityService",
-    );
-
-    _log(
-      "🔥 UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
-    );
-
     if (message.type == 'timeline_position') {
       final value = _extractTimelineValue(message.data);
-
-      developer.log("🔥 PARSED TIMELINE VALUE: $value", name: "UnityService");
-      _log("🔥 PARSED TIMELINE VALUE: $value");
 
       if (value != null && !_timelineController.isClosed) {
         _timelineController.add(value);
       }
+
+      // Timeline messages are intentionally not written to the app log. They
+      // arrive many times per second; logging them would notify every
+      // SequenceController listener and rebuild unrelated parts of the app.
+      return;
     }
+
+    developer.log(
+      "UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
+      name: "UnityService",
+    );
+
+    _log(
+      "UNITY MESSAGE IN FLUTTER: type=${message.type}, data=${message.data}",
+    );
 
     if (message.type == 'unity_test_word') {
       final word = _extractTestWord(message.data);
