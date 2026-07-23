@@ -16,9 +16,6 @@ class UnityService {
   final StreamController<String> _logController =
       StreamController<String>.broadcast();
 
-  final StreamController<double> _timelineController =
-      StreamController<double>.broadcast();
-
   final StreamController<String> _testWordController =
       StreamController<String>.broadcast();
 
@@ -26,7 +23,6 @@ class UnityService {
   StreamSubscription? _sceneSub;
 
   Stream<String> get logs => _logController.stream;
-  Stream<double> get timelineValues => _timelineController.stream;
   Stream<String> get testWords => _testWordController.stream;
 
   bool get isInitialized => _isInitialized;
@@ -50,15 +46,9 @@ class UnityService {
 
   void handleUnityMessage(UnityMessage message) {
     if (message.type == 'timeline_position') {
-      final value = _extractTimelineValue(message.data);
-
-      if (value != null && !_timelineController.isClosed) {
-        _timelineController.add(value);
-      }
-
-      // Timeline messages are intentionally not written to the app log. They
-      // arrive many times per second; logging them would notify every
-      // SequenceController listener and rebuild unrelated parts of the app.
+      // Compatibility guard for older Unity exports that still report the
+      // timeline. Ignore these packets so they cannot trigger global logging
+      // or unrelated Flutter rebuilds.
       return;
     }
 
@@ -81,28 +71,6 @@ class UnityService {
         _testWordController.add(word);
       }
     }
-  }
-
-  double? _extractTimelineValue(dynamic data) {
-    try {
-      if (data is Map) {
-        final value = data['value'];
-        if (value is num) return value.toDouble().clamp(0.0, 1.0);
-      }
-
-      if (data is String) {
-        final decoded = jsonDecode(data);
-
-        if (decoded is Map) {
-          final value = decoded['value'];
-          if (value is num) return value.toDouble().clamp(0.0, 1.0);
-        }
-      }
-    } catch (_) {
-      return null;
-    }
-
-    return null;
   }
 
   String? _extractTestWord(dynamic data) {
@@ -229,46 +197,6 @@ class UnityService {
     }
   }
 
-  Future<void> beginTimelineScrub() async {
-    if (!_isInitialized) throw Exception("UnityService is not initialized.");
-
-    final msg = UnityMessage.to(
-      'FlutterUIBridge',
-      'BeginTimelineScrub',
-      <String, dynamic>{},
-    );
-
-    await bridge.sendWhenReady(msg);
-    _log("Sent BeginTimelineScrub to Unity.");
-  }
-
-  Future<void> setTimelineValue(double value) async {
-    if (!_isInitialized) throw Exception("UnityService is not initialized.");
-
-    final clampedValue = value.clamp(0.0, 1.0);
-
-    final msg = UnityMessage.to(
-      'FlutterUIBridge',
-      'SetTimelineValue',
-      <String, dynamic>{'value': clampedValue},
-    );
-
-    await bridge.sendWhenReady(msg);
-  }
-
-  Future<void> endTimelineScrub() async {
-    if (!_isInitialized) throw Exception("UnityService is not initialized.");
-
-    final msg = UnityMessage.to(
-      'FlutterUIBridge',
-      'EndTimelineScrub',
-      <String, dynamic>{},
-    );
-
-    await bridge.sendWhenReady(msg);
-    _log("Sent EndTimelineScrub to Unity.");
-  }
-
   Future<void> loadCurrentSequenceClips() async {
     if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
@@ -348,7 +276,6 @@ class UnityService {
     await _messageSub?.cancel();
     await _sceneSub?.cancel();
 
-    await _timelineController.close();
     await _testWordController.close();
     await _logController.close();
 
