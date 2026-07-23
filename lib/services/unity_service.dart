@@ -4,6 +4,8 @@ import 'dart:developer' as developer;
 
 import 'package:unity_kit/unity_kit.dart';
 
+import '../models/unity_preview_state.dart';
+
 class UnityService {
   late final UnityBridge bridge;
 
@@ -19,11 +21,18 @@ class UnityService {
   final StreamController<String> _testWordController =
       StreamController<String>.broadcast();
 
+  final StreamController<UnityPreviewState> _previewStateController =
+      StreamController<UnityPreviewState>.broadcast();
+
+  UnityPreviewState _previewState = const UnityPreviewState();
+
   StreamSubscription? _messageSub;
   StreamSubscription? _sceneSub;
 
   Stream<String> get logs => _logController.stream;
   Stream<String> get testWords => _testWordController.stream;
+  Stream<UnityPreviewState> get previewStates => _previewStateController.stream;
+  UnityPreviewState get previewState => _previewState;
 
   bool get isInitialized => _isInitialized;
   bool get isUnityReady => _isUnityReady;
@@ -49,6 +58,17 @@ class UnityService {
       // Compatibility guard for older Unity exports that still report the
       // timeline. Ignore these packets so they cannot trigger global logging
       // or unrelated Flutter rebuilds.
+      return;
+    }
+
+    if (message.type == 'preview_state') {
+      final state = _extractPreviewState(message.data);
+      if (state != null) {
+        _previewState = state;
+        if (!_previewStateController.isClosed) {
+          _previewStateController.add(state);
+        }
+      }
       return;
     }
 
@@ -95,6 +115,53 @@ class UnityService {
     return null;
   }
 
+  UnityPreviewState? _extractPreviewState(dynamic data) {
+    try {
+      final dynamic decoded = data is String ? jsonDecode(data) : data;
+      if (decoded is Map) {
+        return UnityPreviewState.fromJson(
+          decoded.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+    } catch (error) {
+      _log('Could not read Unity preview state: $error');
+    }
+    return null;
+  }
+
+  Future<void> _sendPreviewCommand(
+    String method, [
+    Map<String, dynamic> data = const {},
+  ]) async {
+    if (!_isInitialized) throw Exception("UnityService is not initialized.");
+    await bridge.sendWhenReady(
+      UnityMessage.routed('FlutterUIBridge', method, data),
+    );
+  }
+
+  Future<void> requestPreviewState() =>
+      _sendPreviewCommand('RequestPreviewState');
+
+  Future<void> togglePreviewPlayback() => _sendPreviewCommand('TogglePlay');
+
+  Future<void> goToPreviousPreviewStep() => _sendPreviewCommand('PreviousStep');
+
+  Future<void> goToNextPreviewStep() => _sendPreviewCommand('NextStep');
+
+  Future<void> setPreviewLoop(bool enabled) =>
+      _sendPreviewCommand('SetLoop', {'enabled': enabled});
+
+  Future<void> setPreviewPlaybackSpeed(double value) =>
+      _sendPreviewCommand('SetPlaybackSpeed', {'value': value});
+
+  Future<void> resetPreviewCamera() => _sendPreviewCommand('ResetCamera');
+
+  Future<void> togglePreviewTimelineScope() =>
+      _sendPreviewCommand('ToggleTimelineScope');
+
+  Future<void> setPreviewCommentsEnabled(bool enabled) =>
+      _sendPreviewCommand('SetCommentsEnabled', {'enabled': enabled});
+
   Future<void> requestTestWord() async {
     if (!_isInitialized) throw Exception("UnityService is not initialized.");
 
@@ -111,6 +178,7 @@ class UnityService {
   void markUnityReady() {
     _isUnityReady = true;
     _log("Unity marked as ready");
+    unawaited(requestPreviewState());
   }
 
   void markUnityNotReady() {
@@ -277,6 +345,7 @@ class UnityService {
     await _sceneSub?.cancel();
 
     await _testWordController.close();
+    await _previewStateController.close();
     await _logController.close();
 
     if (_isInitialized) {
@@ -285,6 +354,7 @@ class UnityService {
 
     _lastSequenceName = null;
     _lastAnimations = const [];
+    _previewState = const UnityPreviewState();
 
     _isInitialized = false;
     _isUnityReady = false;
