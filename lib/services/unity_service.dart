@@ -5,6 +5,7 @@ import 'dart:developer' as developer;
 import 'package:unity_kit/unity_kit.dart';
 
 import '../models/unity_preview_state.dart';
+import '../models/unity_step_indicator_state.dart';
 
 class UnityService {
   late final UnityBridge bridge;
@@ -26,7 +27,12 @@ class UnityService {
   final StreamController<UnityPreviewState> _previewStateController =
       StreamController<UnityPreviewState>.broadcast();
 
+  final StreamController<UnityStepIndicatorState>
+  _stepIndicatorStateController =
+      StreamController<UnityStepIndicatorState>.broadcast();
+
   UnityPreviewState _previewState = const UnityPreviewState();
+  UnityStepIndicatorState _stepIndicatorState = const UnityStepIndicatorState();
 
   StreamSubscription? _messageSub;
   StreamSubscription? _sceneSub;
@@ -34,7 +40,10 @@ class UnityService {
   Stream<String> get logs => _logController.stream;
   Stream<String> get testWords => _testWordController.stream;
   Stream<UnityPreviewState> get previewStates => _previewStateController.stream;
+  Stream<UnityStepIndicatorState> get stepIndicatorStates =>
+      _stepIndicatorStateController.stream;
   UnityPreviewState get previewState => _previewState;
+  UnityStepIndicatorState get stepIndicatorState => _stepIndicatorState;
 
   bool get isInitialized => _isInitialized;
   bool get isUnityReady => _isUnityReady;
@@ -69,6 +78,17 @@ class UnityService {
         _previewState = state;
         if (!_previewStateController.isClosed) {
           _previewStateController.add(state);
+        }
+      }
+      return;
+    }
+
+    if (message.type == 'step_indicator_state') {
+      final state = _extractStepIndicatorState(message.data);
+      if (state != null) {
+        _stepIndicatorState = state;
+        if (!_stepIndicatorStateController.isClosed) {
+          _stepIndicatorStateController.add(state);
         }
       }
       return;
@@ -127,6 +147,20 @@ class UnityService {
       }
     } catch (error) {
       _log('Could not read Unity preview state: $error');
+    }
+    return null;
+  }
+
+  UnityStepIndicatorState? _extractStepIndicatorState(dynamic data) {
+    try {
+      final dynamic decoded = data is String ? jsonDecode(data) : data;
+      if (decoded is Map) {
+        return UnityStepIndicatorState.fromJson(
+          decoded.map((key, value) => MapEntry(key.toString(), value)),
+        );
+      }
+    } catch (error) {
+      _log('Could not read Unity step indicator state: $error');
     }
     return null;
   }
@@ -461,6 +495,7 @@ class UnityService {
 
     await _testWordController.close();
     await _previewStateController.close();
+    await _stepIndicatorStateController.close();
     await _logController.close();
 
     if (_isInitialized) {
@@ -470,6 +505,7 @@ class UnityService {
     _lastSequenceName = null;
     _lastAnimations = const [];
     _previewState = const UnityPreviewState();
+    _stepIndicatorState = const UnityStepIndicatorState();
 
     _isInitialized = false;
     _isUnityReady = false;

@@ -5,6 +5,7 @@ import 'package:unity_kit/unity_kit.dart';
 
 import '../controllers/sequence_controller.dart';
 import '../models/unity_preview_state.dart';
+import '../models/unity_step_indicator_state.dart';
 import '../services/unity_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/unity_preview_controls.dart';
@@ -27,18 +28,27 @@ class UnityPreviewScreen extends StatefulWidget {
 
 class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   StreamSubscription<UnityPreviewState>? _stateSubscription;
+  StreamSubscription<UnityStepIndicatorState>? _indicatorSubscription;
   late UnityPreviewState _previewState;
+  late UnityStepIndicatorState _indicatorState;
   late bool _unityViewReady;
 
   @override
   void initState() {
     super.initState();
     _previewState = widget.unityService.previewState;
+    _indicatorState = widget.unityService.stepIndicatorState;
     _unityViewReady =
         widget.unityService.isUnityReady || widget.unityService.bridge.isReady;
     _stateSubscription = widget.unityService.previewStates.listen((state) {
       if (!mounted) return;
       setState(() => _previewState = state);
+    });
+    _indicatorSubscription = widget.unityService.stepIndicatorStates.listen((
+      state,
+    ) {
+      if (!mounted) return;
+      setState(() => _indicatorState = state);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_confirmUnityReadiness());
@@ -48,6 +58,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   @override
   void dispose() {
     _stateSubscription?.cancel();
+    _indicatorSubscription?.cancel();
     super.dispose();
   }
 
@@ -89,6 +100,7 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
           Positioned.fill(
             child: UnityPreviewControls(
               state: _previewState,
+              indicatorState: _indicatorState,
               onTogglePlayback: () {
                 unawaited(widget.unityService.togglePreviewPlayback());
               },

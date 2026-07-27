@@ -16,6 +16,9 @@ abstract final class AppColors {
   static const destructiveSoft = Color(0xFFFF8CA0);
   static const onDestructive = Color(0xFF26151B);
 
+  static const previewStepMarker = Color(0xFFF3ECFF);
+  static const previewSequenceRange = Color(0xFFAA7BFF);
+
   static const textPrimary = Color(0xFFFFFFFF);
   static const textSecondary = Color(0x99FFFFFF);
   static const textDisabled = Color(0x33FFFFFF);

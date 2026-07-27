@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/unity_preview_state.dart';
+import '../models/unity_step_indicator_state.dart';
 import '../theme/app_theme.dart';
+import 'unity_step_indicator_overlay.dart';
 
 const _previewControlBorder = BorderSide(color: Color(0x3DFFFFFF), width: 1);
 
@@ -11,6 +13,7 @@ class UnityPreviewControls extends StatelessWidget {
   const UnityPreviewControls({
     super.key,
     required this.state,
+    required this.indicatorState,
     required this.onTogglePlayback,
     required this.onPreviousStep,
     required this.onNextStep,
@@ -22,6 +25,7 @@ class UnityPreviewControls extends StatelessWidget {
   });
 
   final UnityPreviewState state;
+  final UnityStepIndicatorState indicatorState;
   final VoidCallback onTogglePlayback;
   final VoidCallback onPreviousStep;
   final VoidCallback onNextStep;
@@ -59,6 +63,14 @@ class UnityPreviewControls extends StatelessWidget {
 
     return Stack(
       children: [
+        if (hasTimelineRect)
+          Positioned(
+            left: timelineLeft,
+            right: timelineRight,
+            bottom: timelineBottom,
+            height: state.timelineHeight * screenHeight,
+            child: UnityStepIndicatorOverlay(state: indicatorState),
+          ),
         Positioned(
           left: AppSpacing.lg,
           right: AppSpacing.lg,
