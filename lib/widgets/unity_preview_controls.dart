@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/unity_preview_state.dart';
 import '../theme/app_theme.dart';
 
-const _previewControlBorder = BorderSide(color: AppColors.borderStrong);
+const _previewControlBorder = BorderSide(color: Color(0x3DFFFFFF), width: 1);
 
 class UnityPreviewControls extends StatelessWidget {
   const UnityPreviewControls({
@@ -205,7 +205,7 @@ class _CommentOverlay extends StatelessWidget {
       duration: AppMotion.quick,
       child: visible
           ? Align(
-              key: ValueKey('comment-$text'),
+              key: const ValueKey('comment-visible'),
               alignment: Alignment.topCenter,
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxWidth),
@@ -225,7 +225,7 @@ class _CommentOverlay extends StatelessWidget {
                       ),
                       child: SingleChildScrollView(
                         physics: const ClampingScrollPhysics(),
-                        child: Text(
+                        child: _TypewriterText(
                           text,
                           textAlign: usesMaximumWidth
                               ? TextAlign.left
@@ -240,6 +240,58 @@ class _CommentOverlay extends StatelessWidget {
               ),
             )
           : const SizedBox.shrink(key: ValueKey('no-comment')),
+    );
+  }
+}
+
+class _TypewriterText extends StatelessWidget {
+  const _TypewriterText(
+    this.text, {
+    required this.textAlign,
+    required this.textWidthBasis,
+    required this.style,
+  });
+
+  final String text;
+  final TextAlign textAlign;
+  final TextWidthBasis textWidthBasis;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final codePoints = text.runes.toList(growable: false);
+    final duration = Duration(
+      milliseconds: (120 + codePoints.length * 8).clamp(180, 520),
+    );
+
+    return Stack(
+      children: [
+        ExcludeSemantics(
+          child: Opacity(
+            opacity: 0,
+            child: Text(
+              text,
+              textAlign: textAlign,
+              textWidthBasis: textWidthBasis,
+              style: style,
+            ),
+          ),
+        ),
+        TweenAnimationBuilder<int>(
+          key: ValueKey(text),
+          tween: IntTween(begin: 0, end: codePoints.length),
+          duration: duration,
+          curve: Curves.linear,
+          builder: (context, visibleCharacterCount, _) {
+            return Text(
+              String.fromCharCodes(codePoints.take(visibleCharacterCount)),
+              textAlign: textAlign,
+              textWidthBasis: textWidthBasis,
+              style: style,
+            );
+          },
+        ),
+      ],
     );
   }
 }
@@ -474,9 +526,13 @@ class _PlaybackSpeedWheelState extends State<PlaybackSpeedWheel>
       onVerticalDragStart: _onDragStart,
       onVerticalDragUpdate: _onDragUpdate,
       onVerticalDragEnd: _onDragEnd,
-      child: _MinimalSurface(
-        backgroundAlpha: 0.26,
-        borderRadius: AppRadii.pill,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.black.withValues(alpha: 0.26),
+          borderRadius: BorderRadius.circular(25),
+          border: const Border.fromBorderSide(_previewControlBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: SizedBox(
           width: 50,
           height: 144,
@@ -559,27 +615,24 @@ class _MinimalSurface extends StatelessWidget {
     required this.child,
     this.padding = EdgeInsets.zero,
     this.backgroundAlpha = 0.48,
-    this.borderRadius = AppRadii.medium,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double backgroundAlpha;
-  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(borderRadius),
-    );
-    return _PreviewControlBorder(
-      borderRadius: borderRadius,
-      child: Material(
+    const borderRadius = AppRadii.medium;
+    return Container(
+      decoration: BoxDecoration(
         color: AppColors.black.withValues(alpha: backgroundAlpha),
-        shape: shape,
-        clipBehavior: Clip.antiAlias,
-        child: Padding(padding: padding, child: child),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: const Border.fromBorderSide(_previewControlBorder),
       ),
+      clipBehavior: Clip.antiAlias,
+      padding: padding,
+      child: child,
     );
   }
 }
@@ -758,6 +811,8 @@ class _PreviewControlBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PreviewControlBorderPainter oldDelegate) {
-    return oldDelegate.borderRadius != borderRadius;
+    // Always repaint this very small foreground stroke. This also ensures that
+    // painter geometry/style changes are applied during Flutter hot reload.
+    return true;
   }
 }
