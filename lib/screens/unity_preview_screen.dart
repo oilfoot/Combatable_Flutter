@@ -28,14 +28,20 @@ class UnityPreviewScreen extends StatefulWidget {
 class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   StreamSubscription<UnityPreviewState>? _stateSubscription;
   late UnityPreviewState _previewState;
+  late bool _unityViewReady;
 
   @override
   void initState() {
     super.initState();
     _previewState = widget.unityService.previewState;
+    _unityViewReady =
+        widget.unityService.isUnityReady || widget.unityService.bridge.isReady;
     _stateSubscription = widget.unityService.previewStates.listen((state) {
       if (!mounted) return;
       setState(() => _previewState = state);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_confirmUnityReadiness());
     });
   }
 
@@ -43,6 +49,18 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
   void dispose() {
     _stateSubscription?.cancel();
     super.dispose();
+  }
+
+  void _markUnityViewReady() {
+    widget.unityService.markUnityReady();
+    if (!mounted || _unityViewReady) return;
+    setState(() => _unityViewReady = true);
+  }
+
+  Future<void> _confirmUnityReadiness() async {
+    final ready = await widget.unityService.waitUntilUnityReady();
+    if (!mounted || !ready || _unityViewReady) return;
+    setState(() => _unityViewReady = true);
   }
 
   @override
@@ -59,13 +77,11 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
                 fullscreen: true,
                 unloadOnDispose: false,
               ),
-              placeholder: const Center(
-                child: CircularProgressIndicator(color: AppColors.accent),
-              ),
-              onReady: (bridge) async {
-                widget.unityService.markUnityReady();
+              onReady: (bridge) {
+                _markUnityViewReady();
               },
               onSceneLoaded: (scene) {
+                _markUnityViewReady();
                 unawaited(widget.unityService.requestPreviewState());
               },
             ),
@@ -107,6 +123,15 @@ class _UnityPreviewScreenState extends State<UnityPreviewScreen> {
               },
             ),
           ),
+          if (!_unityViewReady)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.black,
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.accent),
+                ),
+              ),
+            ),
         ],
       ),
     );

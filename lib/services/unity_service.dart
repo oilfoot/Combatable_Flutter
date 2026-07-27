@@ -11,6 +11,8 @@ class UnityService {
 
   bool _isInitialized = false;
   bool _isUnityReady = false;
+  bool _nativePlatformReady = false;
+  bool _nativeFallbackPaused = false;
 
   String? _lastSequenceName;
   List<String> _lastAnimations = const [];
@@ -134,9 +136,50 @@ class UnityService {
     Map<String, dynamic> data = const {},
   ]) async {
     if (!_isInitialized) throw Exception("UnityService is not initialized.");
-    await bridge.sendWhenReady(
+    await _sendUnityMessage(
       UnityMessage.routed('FlutterUIBridge', method, data),
     );
+  }
+
+  Future<bool> _checkNativePlayerReady() async {
+    if (_nativePlatformReady) return true;
+
+    try {
+      _nativePlatformReady = await UnityKitPlatform.instance.isReady();
+    } catch (_) {
+      _nativePlatformReady = false;
+    }
+
+    return _nativePlatformReady;
+  }
+
+  Future<void> _sendUnityMessage(
+    UnityMessage message, {
+    bool queueUntilReady = true,
+  }) async {
+    if (bridge.isReady) {
+      await bridge.send(message);
+      return;
+    }
+
+    // unity_kit can miss its one-shot ready lifecycle event while the native
+    // player is already alive. Send through the same platform channel in that
+    // state instead of leaving the message queued forever.
+    if (await _checkNativePlayerReady()) {
+      await UnityKitPlatform.instance.postMessage(
+        message.nativeGameObject,
+        message.nativeMethod,
+        message.toJson(),
+      );
+      return;
+    }
+
+    if (queueUntilReady) {
+      await bridge.sendWhenReady(message);
+      return;
+    }
+
+    throw StateError('Unity is not ready.');
   }
 
   Future<void> requestPreviewState() =>
@@ -171,11 +214,12 @@ class UnityService {
       <String, dynamic>{},
     );
 
-    await bridge.sendWhenReady(msg);
+    await _sendUnityMessage(msg);
     _log("Requested test word from Unity.");
   }
 
   void markUnityReady() {
+    if (_isUnityReady) return;
     _isUnityReady = true;
     _log("Unity marked as ready");
     unawaited(requestPreviewState());
@@ -198,7 +242,7 @@ class UnityService {
       <String, dynamic>{'sequenceName': sequenceName, 'animations': animations},
     );
 
-    await bridge.send(msg);
+    await _sendUnityMessage(msg, queueUntilReady: false);
 
     _log(
       "Sent sequence '$sequenceName' with ${animations.length} animation(s) to Unity.",
@@ -217,7 +261,7 @@ class UnityService {
       <String, dynamic>{'sequenceName': sequenceName, 'animations': animations},
     );
 
-    await bridge.sendWhenReady(msg);
+    await _sendUnityMessage(msg);
 
     _log(
       "Queued sequence '$sequenceName' with ${animations.length} animation(s) for Unity.",
@@ -235,7 +279,7 @@ class UnityService {
       <String, dynamic>{'catalogPath': catalogPath},
     );
 
-    await bridge.sendWhenReady(msg);
+    await _sendUnityMessage(msg);
 
     _log("Sent local catalog path to Unity: $catalogPath");
   }
@@ -249,7 +293,7 @@ class UnityService {
       <String, dynamic>{'jsonPath': jsonPath},
     );
 
-    await bridge.sendWhenReady(msg);
+    await _sendUnityMessage(msg);
 
     _log("Sent downloaded JSON path to Unity: $jsonPath");
   }
@@ -274,7 +318,7 @@ class UnityService {
       <String, dynamic>{},
     );
 
-    await bridge.sendWhenReady(msg);
+    await _sendUnityMessage(msg);
 
     _log("Sent LoadCurrentSequenceClips trigger to Unity.");
   }
@@ -282,9 +326,29 @@ class UnityService {
   Future<void> resumeUnity() async {
     if (!_isInitialized) return;
 
+    if (!bridge.isReady) {
+      if (_nativeFallbackPaused && await _checkNativePlayerReady()) {
+        try {
+          await UnityKitPlatform.instance.resume();
+          _nativeFallbackPaused = false;
+          _log("Unity resumed through the native fallback");
+        } catch (e) {
+          _log("Native Unity resume skipped: $e");
+        }
+      } else {
+        _log("Unity resume deferred until the native player is ready");
+      }
+      return;
+    }
+
+    if (bridge.currentState != UnityLifecycleState.paused) {
+      _log("Unity is already active");
+      return;
+    }
+
     try {
       await bridge.resume();
-      _isUnityReady = true;
+      _nativeFallbackPaused = false;
       _log("Unity resumed");
     } catch (e) {
       _log("Unity resume skipped: $e");
@@ -294,13 +358,64 @@ class UnityService {
   Future<void> pauseUnity() async {
     if (!_isInitialized) return;
 
+    final state = bridge.currentState;
+    if (!bridge.isReady) {
+      if (!_nativeFallbackPaused && await _checkNativePlayerReady()) {
+        try {
+          await UnityKitPlatform.instance.pause();
+          _nativeFallbackPaused = true;
+          _log("Unity paused through the native fallback");
+        } catch (e) {
+          _log("Native Unity pause skipped: $e");
+        }
+      } else {
+        _log("Unity pause skipped because the player is not active");
+      }
+      return;
+    }
+
+    if (state != UnityLifecycleState.ready &&
+        state != UnityLifecycleState.resumed) {
+      _log("Unity pause skipped because the player is not active");
+      return;
+    }
+
     try {
       await bridge.pause();
-      _isUnityReady = false;
+      _nativeFallbackPaused = true;
       _log("Unity paused");
     } catch (e) {
       _log("Unity pause skipped: $e");
     }
+  }
+
+  Future<bool> waitUntilUnityReady({
+    Duration timeout = const Duration(seconds: 20),
+  }) async {
+    if (!_isInitialized) return false;
+
+    final deadline = DateTime.now().add(timeout);
+
+    while (DateTime.now().isBefore(deadline)) {
+      if (bridge.isReady) {
+        _nativePlatformReady = true;
+        markUnityReady();
+        return true;
+      }
+
+      if (await _checkNativePlayerReady()) {
+        _log(
+          "Native Unity player is ready; using the lifecycle-event fallback",
+        );
+        markUnityReady();
+        return true;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+
+    _log("Unity did not become ready before the startup timeout");
+    return false;
   }
 
   Future<void> preparePreview({
@@ -358,5 +473,7 @@ class UnityService {
 
     _isInitialized = false;
     _isUnityReady = false;
+    _nativePlatformReady = false;
+    _nativeFallbackPaused = false;
   }
 }

@@ -42,6 +42,9 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _currentIndex = 1;
   bool _isNavExpanded = false;
+  bool _isUnityViewMounted = false;
+  Future<bool>? _unityWarmupFuture;
+  Widget? _unityPage;
   final GlobalKey _sequenceBuilderNavKey = GlobalKey(
     debugLabel: 'sequence-builder-nav-target',
   );
@@ -88,11 +91,7 @@ class _AppShellState extends State<AppShell> {
         libraryController: _libraryController,
         sequenceBuilderNavKey: _sequenceBuilderNavKey,
       ),
-      UnityPreviewScreen(
-        unityService: widget.unityService,
-        sequenceController: widget.sequenceController,
-        embeddedInTab: true,
-      ),
+      const SizedBox.expand(),
       SequenceBuilderScreen(
         sequenceController: widget.sequenceController,
         sequenceHistoryController: _sequenceHistoryController,
@@ -108,6 +107,12 @@ class _AppShellState extends State<AppShell> {
         sequenceBuilderNavKey: _sequenceBuilderNavKey,
       ),
     ];
+
+    // Let Flutter paint the initial screen first, then start Unity in the
+    // background so opening the 3D tab later is effectively instant.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_ensureUnityPrewarmed());
+    });
   }
 
   @override
@@ -136,21 +141,21 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> buildAndOpenUnity() async {
+    final unityReady = await _mountAndShowUnity();
+    if (!unityReady) return;
+
     await _remoteAddressablesService.ensureUnityPrepared();
 
     await widget.unityService.preparePreview(
       sequenceName: widget.sequenceController.sequenceName,
       animations: widget.sequenceController.getAnimationNamesForUnity(),
     );
-
-    if (!mounted) return;
-
-    setState(() {
-      _currentIndex = 2;
-    });
   }
 
   Future<void> _buildSavedSequence(SavedSequence sequence) async {
+    final unityReady = await _mountAndShowUnity();
+    if (!unityReady) return;
+
     await _remoteAddressablesService.ensureUnityPrepared();
     await widget.unityService.preparePreview(
       sequenceName: sequence.name,
@@ -158,30 +163,90 @@ class _AppShellState extends State<AppShell> {
         for (final animation in sequence.animations) animation.animationName,
       ],
     );
-
-    if (!mounted) return;
-    setState(() => _currentIndex = 2);
   }
 
   Future<void> _viewAnimationIn3D(AnimationLibraryItem animation) async {
+    final unityReady = await _mountAndShowUnity();
+    if (!unityReady) return;
+
     await _remoteAddressablesService.ensureUnityPrepared();
     await widget.unityService.preparePreview(
       sequenceName: animation.title,
       animations: [animation.animationName],
     );
+  }
 
-    if (!mounted) return;
-    setState(() => _currentIndex = 2);
+  Future<bool> _mountAndShowUnity() async {
+    if (!mounted) return false;
+
+    setState(() {
+      _mountUnityView();
+      _currentIndex = 2;
+    });
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return false;
+
+    final ready = await _ensureUnityPrewarmed();
+    if (!mounted || !ready) return false;
+
+    // If the background warmup already paused Unity, resume only after that
+    // operation has completed. This avoids pause/resume crossing each other
+    // when the user opens the tab during startup.
+    await widget.unityService.resumeUnity();
+    return true;
+  }
+
+  void _mountUnityView() {
+    if (_isUnityViewMounted) return;
+
+    _isUnityViewMounted = true;
+    _unityPage = UnityPreviewScreen(
+      unityService: widget.unityService,
+      sequenceController: widget.sequenceController,
+      embeddedInTab: true,
+    );
+  }
+
+  Future<bool> _ensureUnityPrewarmed() {
+    final runningWarmup = _unityWarmupFuture;
+    if (runningWarmup != null) return runningWarmup;
+
+    final warmup = _prewarmUnity();
+    _unityWarmupFuture = warmup;
+    unawaited(
+      warmup.then((ready) {
+        if (!ready && identical(_unityWarmupFuture, warmup)) {
+          _unityWarmupFuture = null;
+        }
+      }),
+    );
+    return warmup;
+  }
+
+  Future<bool> _prewarmUnity() async {
+    if (!mounted) return false;
+
+    if (!_isUnityViewMounted) {
+      setState(_mountUnityView);
+    }
+
+    // Creating Unity after the first Flutter frame keeps the initial UI
+    // responsive while still starting the native runtime immediately.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return false;
+
+    final ready = await widget.unityService.waitUntilUnityReady();
+    if (!mounted || !ready) return false;
+
+    // Unity lives in a permanently composited layer behind the opaque Flutter
+    // pages, so iOS has attached its Metal surface before we pause it.
+    await widget.unityService.pauseUnity();
+    return true;
   }
 
   Future<void> _openUnityPreview() async {
-    await widget.unityService.resumeUnity();
-
-    if (!mounted) return;
-
-    setState(() {
-      _currentIndex = 2;
-    });
+    await _mountAndShowUnity();
   }
 
   Future<void> _onNavTapped(int index) async {
@@ -225,7 +290,20 @@ class _AppShellState extends State<AppShell> {
               behavior: HitTestBehavior.translucent,
               onPointerDown: (_) => _collapseNav(),
               onPointerMove: (_) => _collapseNav(),
-              child: IndexedStack(index: _currentIndex, children: _pages),
+              child: Stack(
+                children: [
+                  if (_unityPage case final unityPage?)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: _currentIndex != 2,
+                        child: unityPage,
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: IndexedStack(index: _currentIndex, children: _pages),
+                  ),
+                ],
+              ),
             ),
           ),
 
