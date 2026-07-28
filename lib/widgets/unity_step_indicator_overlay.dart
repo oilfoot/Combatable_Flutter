@@ -24,6 +24,11 @@ class UnityStepIndicatorOverlay extends StatefulWidget {
 
 class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
     with SingleTickerProviderStateMixin {
+  static const double _targetEpsilon = 0.000001;
+  static const double _markerRevealTravel = 0.025;
+  static const double _markerRevealMaxDelay = 0.38;
+  static const double _rangeRevealMaxDelay = 0.32;
+
   late final AnimationController _controller;
   final Map<String, _AnimatedMarker> _markers = {};
   final Map<String, _AnimatedRange> _ranges = {};
@@ -54,7 +59,7 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
   @override
   void didUpdateWidget(covariant UnityStepIndicatorOverlay oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.state, widget.state)) {
+    if (!_hasSameAnimationTarget(oldWidget.state, widget.state)) {
       _applyState(widget.state, animate: true);
     }
   }
@@ -67,14 +72,35 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
 
   void _applyState(UnityStepIndicatorState state, {required bool animate}) {
     _captureCurrentValues();
+    final nextViewportEnd = math.max(
+      state.viewportStart + 0.0001,
+      state.viewportEnd,
+    );
+    final isViewportTransition =
+        animate &&
+        state.ready &&
+        (!_nearlyEqual(state.viewportStart, _viewportToStart) ||
+            !_nearlyEqual(nextViewportEnd, _viewportToEnd));
     final isContentChange =
-        animate && state.ready && state.contentKey != _contentKey;
+        animate &&
+        state.ready &&
+        !isViewportTransition &&
+        state.contentKey != _contentKey;
     _contentKey = state.contentKey;
 
     _viewportFromStart = _currentViewportStart;
     _viewportFromEnd = _currentViewportEnd;
     _viewportToStart = state.viewportStart;
-    _viewportToEnd = math.max(state.viewportStart + 0.0001, state.viewportEnd);
+    _viewportToEnd = nextViewportEnd;
+
+    // A new animation/sequence is a new visual scene, even when it happens to
+    // reuse stable marker keys from the previously loaded content. Keeping the
+    // old objects would make those markers travel from their former positions
+    // and break the intentional left-to-right reveal.
+    if (isContentChange) {
+      _markers.clear();
+      _ranges.clear();
+    }
 
     _targetMarkerKeys = {
       for (final marker in state.markers)
@@ -85,18 +111,30 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
         if (range.key.isNotEmpty) range.key,
     };
 
-    for (final marker in state.markers) {
+    final orderedMarkers = [...state.markers]
+      ..sort((a, b) {
+        final positionComparison = a.position.compareTo(b.position);
+        if (positionComparison != 0) return positionComparison;
+        return a.key.compareTo(b.key);
+      });
+    for (var index = 0; index < orderedMarkers.length; index++) {
+      final marker = orderedMarkers[index];
       if (marker.key.isEmpty) continue;
       final existing = _markers[marker.key];
+      final revealDelay = isContentChange
+          ? _orderedDelay(index, orderedMarkers.length, _markerRevealMaxDelay)
+          : 0.0;
       if (existing == null) {
         _markers[marker.key] = _AnimatedMarker(
-          fromPosition: marker.position,
+          fromPosition: isContentChange
+              ? math.max(0, marker.position - _markerRevealTravel)
+              : marker.position,
           toPosition: marker.position,
           fromAlpha: animate ? 0 : 1,
           toAlpha: 1,
           fromScale: animate ? 0.35 : 1,
           toScale: 1,
-          delay: isContentChange ? marker.position * 0.42 : 0,
+          delay: revealDelay,
         );
       } else {
         existing
@@ -106,7 +144,7 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
           ..toAlpha = 1
           ..fromScale = isContentChange ? 0.35 : existing.currentScale
           ..toScale = 1
-          ..delay = isContentChange ? marker.position * 0.42 : 0;
+          ..delay = revealDelay;
       }
     }
 
@@ -122,9 +160,19 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
         ..delay = 0;
     }
 
-    for (final range in state.ranges) {
+    final orderedRanges = [...state.ranges]
+      ..sort((a, b) {
+        final startComparison = a.start.compareTo(b.start);
+        if (startComparison != 0) return startComparison;
+        return a.key.compareTo(b.key);
+      });
+    for (var index = 0; index < orderedRanges.length; index++) {
+      final range = orderedRanges[index];
       if (range.key.isEmpty) continue;
       final existing = _ranges[range.key];
+      final revealDelay = isContentChange
+          ? _orderedDelay(index, orderedRanges.length, _rangeRevealMaxDelay)
+          : 0.0;
       if (existing == null) {
         _ranges[range.key] = _AnimatedRange(
           fromStart: range.start,
@@ -133,7 +181,7 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
           toEnd: range.end,
           fromAlpha: animate ? 0 : 1,
           toAlpha: 1,
-          delay: isContentChange ? range.start * 0.34 : 0,
+          delay: revealDelay,
         );
       } else {
         existing
@@ -143,7 +191,7 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
           ..toEnd = range.end
           ..fromAlpha = isContentChange ? 0 : existing.currentAlpha
           ..toAlpha = 1
-          ..delay = isContentChange ? range.start * 0.34 : 0;
+          ..delay = revealDelay;
       }
     }
 
@@ -172,19 +220,75 @@ class _UnityStepIndicatorOverlayState extends State<UnityStepIndicatorOverlay>
       ..forward(from: 0);
   }
 
+  bool _hasSameAnimationTarget(
+    UnityStepIndicatorState previous,
+    UnityStepIndicatorState next,
+  ) {
+    if (previous.ready != next.ready ||
+        previous.focused != next.focused ||
+        !_nearlyEqual(previous.viewportStart, next.viewportStart) ||
+        !_nearlyEqual(previous.viewportEnd, next.viewportEnd) ||
+        previous.markers.length != next.markers.length ||
+        previous.ranges.length != next.ranges.length) {
+      return false;
+    }
+
+    for (var index = 0; index < previous.markers.length; index++) {
+      final oldMarker = previous.markers[index];
+      final newMarker = next.markers[index];
+      if (oldMarker.key != newMarker.key ||
+          !_nearlyEqual(oldMarker.position, newMarker.position)) {
+        return false;
+      }
+    }
+
+    for (var index = 0; index < previous.ranges.length; index++) {
+      final oldRange = previous.ranges[index];
+      final newRange = next.ranges[index];
+      if (oldRange.key != newRange.key ||
+          !_nearlyEqual(oldRange.start, newRange.start) ||
+          !_nearlyEqual(oldRange.end, newRange.end)) {
+        return false;
+      }
+    }
+
+    if (previous.contentKey == next.contentKey) return true;
+
+    // Scope-in causes Unity to rebuild its local clip data after it has
+    // already sent the focused viewport. The follow-up packet can therefore
+    // have a different content signature even though every visible target is
+    // identical. Restarting here makes only the inward zoom feel slower. Keep
+    // the original controller clock running when that packet belongs to the
+    // scope transition already in flight.
+    return _controller.isAnimating &&
+        next.focused &&
+        _nearlyEqual(next.viewportStart, _viewportToStart) &&
+        _nearlyEqual(next.viewportEnd, _viewportToEnd);
+  }
+
   void _captureCurrentValues() => _setProgress(_animationProgress);
 
   void _setProgress(double progress) {
-    _currentViewportStart = lerpDouble(
-      _viewportFromStart,
-      _viewportToStart,
-      progress,
-    )!;
-    _currentViewportEnd = lerpDouble(
-      _viewportFromEnd,
-      _viewportToEnd,
-      progress,
-    )!;
+    // Interpolate the viewport's screen transform, not its raw boundaries.
+    //
+    // Unity glides the native timeline position directly from its old screen
+    // coordinate to its new one. Interpolating viewportStart/viewportEnd
+    // instead makes the division in `_mapPosition` non-linear and causes the
+    // Flutter markers to visibly lag behind during scope-in. Scale + offset
+    // are affine, so interpolating those makes every marker follow the exact
+    // same eased screen-space path as Unity's timeline.
+    final fromSpan = math.max(0.0001, _viewportFromEnd - _viewportFromStart);
+    final toSpan = math.max(0.0001, _viewportToEnd - _viewportToStart);
+    final fromScale = 1 / fromSpan;
+    final toScale = 1 / toSpan;
+    final fromOffset = -_viewportFromStart * fromScale;
+    final toOffset = -_viewportToStart * toScale;
+    final currentScale = lerpDouble(fromScale, toScale, progress)!;
+    final currentOffset = lerpDouble(fromOffset, toOffset, progress)!;
+
+    _currentViewportStart = -currentOffset / currentScale;
+    _currentViewportEnd = _currentViewportStart + (1 / currentScale);
+
     for (final marker in _markers.values) {
       marker.setProgress(progress);
     }
@@ -290,6 +394,14 @@ double _staggeredProgress(double progress, double delay) {
   if (delay <= 0) return progress;
   return ((progress - delay) / math.max(0.0001, 1 - delay)).clamp(0, 1);
 }
+
+double _orderedDelay(int index, int itemCount, double maximumDelay) {
+  if (itemCount <= 1) return 0;
+  return (index / (itemCount - 1)) * maximumDelay;
+}
+
+bool _nearlyEqual(double a, double b) =>
+    (a - b).abs() <= _UnityStepIndicatorOverlayState._targetEpsilon;
 
 class _StepIndicatorPainter extends CustomPainter {
   const _StepIndicatorPainter({

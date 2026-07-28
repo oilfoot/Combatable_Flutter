@@ -123,4 +123,127 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('scope markers follow Unity timeline in screen space', (
+    tester,
+  ) async {
+    const markerPosition = 0.55;
+    const fullState = UnityStepIndicatorState(
+      ready: true,
+      markers: [
+        UnityStepIndicatorMarker(key: 'current', position: markerPosition),
+      ],
+    );
+    const focusedState = UnityStepIndicatorState(
+      ready: true,
+      focused: true,
+      viewportStart: 0.4,
+      viewportEnd: 0.7,
+      transitionDuration: 0.42,
+      markers: [
+        UnityStepIndicatorMarker(key: 'current', position: markerPosition),
+      ],
+    );
+
+    Widget subject(UnityStepIndicatorState state) {
+      return MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 300,
+            height: 16,
+            child: UnityStepIndicatorOverlay(state: state),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(subject(fullState));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(subject(focusedState));
+    await tester.pump(const Duration(milliseconds: 210));
+
+    final overlay = find.byType(UnityStepIndicatorOverlay);
+    final paintFinder = find.descendant(
+      of: overlay,
+      matching: find.byType(CustomPaint),
+    );
+    final customPaint = tester.widget<CustomPaint>(paintFinder);
+    final dynamic painter = customPaint.painter;
+    final viewportStart = painter.viewportStart as double;
+    final viewportEnd = painter.viewportEnd as double;
+    final displayedPosition =
+        (markerPosition - viewportStart) / (viewportEnd - viewportStart);
+
+    // Unity moves from 0.55 to the focused 0.50 position. At half of the
+    // shared ease-in-out transition, Flutter must therefore also be at 0.525.
+    expect(displayedPosition, closeTo(0.525, 0.001));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('does not restart scope-in for a duplicate rebuilt target', (
+    tester,
+  ) async {
+    const markers = [
+      UnityStepIndicatorMarker(key: 'left', position: 0.1),
+      UnityStepIndicatorMarker(key: 'focus-start', position: 0.4),
+      UnityStepIndicatorMarker(key: 'focus-end', position: 0.7),
+    ];
+    const ranges = [
+      UnityStepIndicatorRange(key: 'focused', start: 0.4, end: 0.7),
+    ];
+    const fullState = UnityStepIndicatorState(
+      ready: true,
+      contentKey: 'sequence',
+      markers: markers,
+      ranges: ranges,
+    );
+    const focusedState = UnityStepIndicatorState(
+      ready: true,
+      focused: true,
+      viewportStart: 0.4,
+      viewportEnd: 0.7,
+      contentKey: 'sequence',
+      markers: markers,
+      ranges: ranges,
+    );
+    const rebuiltFocusedState = UnityStepIndicatorState(
+      ready: true,
+      focused: true,
+      viewportStart: 0.4,
+      viewportEnd: 0.7,
+      contentKey: 'sequence-after-local-clip-rebuild',
+      markers: markers,
+      ranges: ranges,
+    );
+
+    Widget subject(UnityStepIndicatorState state) {
+      return MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 300,
+            height: 16,
+            child: UnityStepIndicatorOverlay(state: state),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(subject(fullState));
+    await tester.pumpWidget(subject(focusedState));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pumpWidget(subject(rebuiltFocusedState));
+    await tester.pump(const Duration(milliseconds: 340));
+
+    final overlay = find.byType(UnityStepIndicatorOverlay);
+    final paintFinder = find.descendant(
+      of: overlay,
+      matching: find.byType(CustomPaint),
+    );
+    final customPaint = tester.widget<CustomPaint>(paintFinder);
+    final dynamic painter = customPaint.painter;
+
+    expect(painter.viewportStart as double, closeTo(0.4, 0.001));
+    expect(painter.viewportEnd as double, closeTo(0.7, 0.001));
+    expect(tester.takeException(), isNull);
+  });
 }
